@@ -32,6 +32,9 @@ export interface StatsTecnicos {
   tiro: number;
   regate: number;
   cabeceo: number;
+  centros: number;
+  entradas: number;
+  reflejos: number;
 }
 
 export interface StatsFisicos {
@@ -39,18 +42,25 @@ export interface StatsFisicos {
   velocidad: number;
   aceleracion: number;
   fuerza: number;
+  salto: number;
+  agilidad: number;
 }
 
 export interface StatsTacticos {
   posicionamiento: number;
   vision: number;
   decisiones: number;
+  presion_alta: number;
+  colocacion: number;
 }
 
 export interface StatsMentales {
   disciplina: number;
   confianza: number;
-  presion: number; // Capacidad de aguantar presión
+  presion: number;
+  liderazgo: number;
+  concentracion: number;
+  ambicion: number;
 }
 
 export interface EstadoJugador {
@@ -143,12 +153,13 @@ export interface Player {
   id: string;
   personal: {
     nombre: string;
+    apellido?: string;
     edad: number;
     nacionalidad: string;
     genero: 'M' | 'F';
-    piernaDominante: 'Derecha' | 'Izquierda' | 'Ambas';
-    altura: number; 
-    peso: number; 
+    piernaDominante: 'derecho' | 'izquierdo' | 'ambidiestro';
+    altura: number;
+    peso: number;
     dorsal: number;
     fechaNacimiento: string;
     cantera: string;
@@ -156,12 +167,19 @@ export interface Player {
   };
   posicionPrincipal: Posicion;
   posicionesSecundarias: Posicion[];
-  
+
+  // RPG fields
+  origen: string;           // "academia" | "calle" | "atletico" | "tactico"
+  personalidad: string;     // "lider" | "profesional" | "rebelde" | "silencioso"
+  estiloJuego: string;      // play style id
+  traits: string[];         // array of trait ids
+  potencial: number;        // 1-5, growth speed
+
   tecnicos: StatsTecnicos;
   fisicos: StatsFisicos;
   tacticos: StatsTacticos;
   mentales: StatsMentales;
-  
+
   estado: EstadoJugador;
   confianza: Confianza;
   carrera: Carrera;
@@ -177,9 +195,10 @@ export interface DecisionOption {
   id: string;
   texto: string;
   tipo: 'AGRESIVO' | 'EQUILIBRADO' | 'SEGURO' | 'TECNICO' | 'TACTICO' | 'FISICO';
-  statPrincipal: keyof StatsTecnicos | keyof StatsFisicos | keyof StatsTacticos; 
-  pesoStat: number; 
-  riesgo: number; 
+  statPrincipal: keyof StatsTecnicos | keyof StatsFisicos | keyof StatsTacticos | keyof StatsMentales;
+  pesoStat: number;
+  riesgo: number;
+  narrativos?: Partial<Record<ResultadoDecision, string[]>>;
 }
 
 // Logger ahora soporta batching implícitamente si se maneja en UI, 

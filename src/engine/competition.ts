@@ -96,8 +96,8 @@ export const processPromotionRelegation = (world: WorldState): { newWorld: World
   const candidatesRel = primera.slice(14); // Los últimos 6
   const candidatesProm = segunda.slice(0, 6); // Los primeros 6
   
-  const relegated = [];
-  const promoted = [];
+  const relegated: string[] = [];
+  const promoted: string[] = [];
 
   for(let i=0; i<3; i++) {
     const rIdx = Math.floor(Math.random() * candidatesRel.length);
