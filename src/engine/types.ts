@@ -154,6 +154,7 @@ export interface Player {
   personal: {
     nombre: string;
     apellido?: string;
+    apodo?: string;
     edad: number;
     nacionalidad: string;
     genero: 'M' | 'F';

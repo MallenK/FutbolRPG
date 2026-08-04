@@ -37,6 +37,8 @@ type PlayerData = {
     piernaDominante?: string
     altura?: number
     peso?: number
+    apodo?: string
+    dorsal?: number
     carrera: {
       club: string
       liga?: string
@@ -207,7 +209,11 @@ export default function DashboardPage() {
                     <span className="text-xl font-black text-green-400">{player.position}</span>
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black">{player.name}</h2>
+                    <h2 className="text-2xl font-black">
+                      {player.state.apodo ? `"${player.state.apodo}"` : player.name}
+                      {player.state.dorsal && <span className="text-gray-500 text-base font-mono ml-2">#{player.state.dorsal}</span>}
+                    </h2>
+                    {player.state.apodo && <p className="text-gray-500 text-xs -mt-0.5">{player.name}</p>}
                     <p className="text-gray-400 text-sm">
                       {POSITION_LABELS[player.position]} · {player.nationality} · {player.age} años
                     </p>

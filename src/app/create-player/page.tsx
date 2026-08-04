@@ -5,13 +5,20 @@ import { useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import StatBar from "@/components/StatBar"
 import {
-  POSITIONS, NATIONALITIES,
+  POSITIONS, NATIONALITIES, NATIONALITY_FLAGS,
   ORIGINS, PERSONALITIES, PLAY_STYLES, SELECTABLE_TRAITS,
   FOOT_OPTIONS, POSITION_STAT_PROFILES, STAT_BY_KEY, BASE_STATS,
   buildAttributes,
   type Position, type OriginId, type PersonalityId, type DominantFoot, type StatKey,
 } from "@/lib/player-config"
 import { getDivisionInfo } from "@/lib/world"
+import { TIER_HEX } from "@/lib/tier-colors"
+import dynamic from "next/dynamic"
+
+const PlayerAvatarPreview = dynamic(() => import("@/components/PlayerAvatarPreview"), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gray-950 animate-pulse" />,
+})
 
 const TOTAL_STEPS = 7
 const EXTRA_POINTS = 30
@@ -79,6 +86,8 @@ export default function CreatePlayerPage() {
   // Step 1: Identity
   const [nombre, setNombre] = useState("")
   const [apellido, setApellido] = useState("")
+  const [apodo, setApodo] = useState("")
+  const [dorsal, setDorsal] = useState(10)
   const [nationality, setNationality] = useState("España")
   const [birthYear, setBirthYear] = useState(2002)
   const [altura, setAltura] = useState(180)
@@ -100,13 +109,19 @@ export default function CreatePlayerPage() {
   const [extras, setExtras] = useState<Partial<Record<StatKey, number>>>({})
   const [pointsLeft, setPointsLeft] = useState(EXTRA_POINTS)
 
-  // Step 6: Division
+  // Step 6: Division + club
   const [divisionInicial, setDivisionInicial] = useState(3)
+  const [clubElegido, setClubElegido] = useState(getDivisionInfo(3).clubes[0])
 
   // Reset style when position changes
   useEffect(() => {
     setPlayStyle(PLAY_STYLES[position][0].id)
   }, [position])
+
+  // Reset club choice when division changes
+  useEffect(() => {
+    setClubElegido(getDivisionInfo(divisionInicial).clubes[0])
+  }, [divisionInicial])
 
   // Reset extras when position/origin change
   useEffect(() => {
@@ -171,6 +186,8 @@ export default function CreatePlayerPage() {
           attributes,
           rpg: {
             apellido,
+            apodo: apodo.trim() || undefined,
+            dorsal,
             piernaDominante: foot,
             altura,
             peso,
@@ -180,6 +197,7 @@ export default function CreatePlayerPage() {
             estiloJuego: playStyle,
             traits: [origin.traitId, selectedTrait],
             potencial: origin.potencial,
+            clubElegido,
           },
         }),
       })
@@ -211,6 +229,28 @@ export default function CreatePlayerPage() {
       <div className="max-w-2xl mx-auto px-4 py-10">
         <StepIndicator step={step} total={TOTAL_STEPS} />
 
+        <div className="mb-6 rounded-2xl border border-gray-800 overflow-hidden bg-gray-900">
+          <div className="relative w-full h-56">
+            <PlayerAvatarPreview
+              kitColor={position === "GK" ? TIER_HEX.yellow : TIER_HEX.green}
+              heightScale={altura / 180}
+              buildScale={peso / 75}
+            />
+            <div className="absolute top-3 left-3 w-9 h-9 rounded-full bg-black/60 border border-gray-700 flex items-center justify-center">
+              <span className="text-white font-mono font-bold text-sm">{dorsal}</span>
+            </div>
+            <div className="absolute top-3 right-3 text-lg">{NATIONALITY_FLAGS[nationality]}</div>
+          </div>
+          <div className="px-4 py-3 border-t border-gray-800 text-center">
+            <p className="text-white font-bold">
+              {apodo.trim() ? `"${apodo.trim()}"` : (nombre || "Tu jugador")}
+            </p>
+            {apodo.trim() && (nombre || apellido) && (
+              <p className="text-gray-500 text-xs mt-0.5">{nombre} {apellido}</p>
+            )}
+          </div>
+        </div>
+
         {/* ── Step 1: Identity ─────────────────────────────────────────────── */}
         {step === 1 && (
           <div className="space-y-5">
@@ -233,13 +273,32 @@ export default function CreatePlayerPage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Apodo <span className="text-gray-600 normal-case">(opcional)</span></label>
+                <input
+                  value={apodo} onChange={(e) => setApodo(e.target.value)}
+                  placeholder="El Mago" maxLength={20}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Dorsal</label>
+                <input
+                  type="number" min={1} max={99} value={dorsal}
+                  onChange={(e) => setDorsal(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white text-center font-mono font-bold focus:outline-none focus:border-green-500"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-gray-400 mb-2 uppercase tracking-wider">Nacionalidad</label>
               <select
                 value={nationality} onChange={(e) => setNationality(e.target.value)}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500"
               >
-                {NATIONALITIES.map((n) => <option key={n}>{n}</option>)}
+                {NATIONALITIES.map((n) => <option key={n} value={n}>{NATIONALITY_FLAGS[n]} {n}</option>)}
               </select>
             </div>
 
@@ -479,10 +538,23 @@ export default function CreatePlayerPage() {
                       "bg-green-500/20 text-green-400"}`}>{opt.tag}</span>
                   </div>
                   <p className="text-gray-400 text-sm">{opt.desc}</p>
-                  <p className="text-gray-600 text-xs mt-2">Club inicial: <span className="text-gray-400">{divInfo.clubes[0]}</span></p>
                 </button>
               )
             })}
+
+            <div className="pt-2">
+              <p className="text-xs text-gray-400 mb-3 uppercase tracking-wider">Tu equipo preferente en {getDivisionInfo(divisionInicial).nombre}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {getDivisionInfo(divisionInicial).clubes.map((club) => (
+                  <button key={club} onClick={() => setClubElegido(club)}
+                    className={`py-3 px-3 rounded-xl font-semibold text-sm text-left transition-colors ${clubElegido === club ? "bg-green-500 text-black" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
+                  >
+                    {club}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <NavButtons onBack={() => setStep(5)} onNext={() => setStep(7)} />
           </div>
         )}
@@ -506,8 +578,12 @@ export default function CreatePlayerPage() {
                     <span className="text-xl font-black text-green-400">{position}</span>
                   </div>
                   <div>
-                    <p className="text-2xl font-black">{nombre || "—"} {apellido}</p>
-                    <p className="text-gray-400 text-sm">{POSITIONS.find((p) => p.id === position)?.label} · {nationality} · {age} años</p>
+                    <p className="text-2xl font-black">
+                      {apodo.trim() ? `"${apodo.trim()}"` : `${nombre || "—"} ${apellido}`}
+                      <span className="text-gray-500 text-base font-mono ml-2">#{dorsal}</span>
+                    </p>
+                    {apodo.trim() && <p className="text-gray-400 text-sm">{nombre} {apellido}</p>}
+                    <p className="text-gray-400 text-sm">{POSITIONS.find((p) => p.id === position)?.label} · {NATIONALITY_FLAGS[nationality]} {nationality} · {age} años</p>
                     <p className="text-gray-500 text-xs mt-0.5">{altura} cm · {peso} kg · Pie {foot}</p>
                   </div>
                 </div>
@@ -546,8 +622,8 @@ export default function CreatePlayerPage() {
                 </div>
 
                 <div className="border-t border-gray-800 pt-4">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Club inicial</p>
-                  <p className="text-white font-semibold">{divInfo.clubes[0]} · {divInfo.nombre}</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Equipo preferente</p>
+                  <p className="text-white font-semibold">{clubElegido} · {divInfo.nombre}</p>
                 </div>
               </div>
 

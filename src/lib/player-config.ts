@@ -381,6 +381,14 @@ export const NATIONALITIES = [
   "Croacia", "Senegal", "Marruecos", "Nigeria", "Costa Rica", "Chile", "Ecuador",
 ]
 
+export const NATIONALITY_FLAGS: Record<string, string> = {
+  "España": "🇪🇸", "Argentina": "🇦🇷", "Brasil": "🇧🇷", "Francia": "🇫🇷",
+  "Alemania": "🇩🇪", "Italia": "🇮🇹", "Portugal": "🇵🇹", "Inglaterra": "🇬🇧",
+  "México": "🇲🇽", "Colombia": "🇨🇴", "Uruguay": "🇺🇾", "Países Bajos": "🇳🇱",
+  "Bélgica": "🇧🇪", "Croacia": "🇭🇷", "Senegal": "🇸🇳", "Marruecos": "🇲🇦",
+  "Nigeria": "🇳🇬", "Costa Rica": "🇨🇷", "Chile": "🇨🇱", "Ecuador": "🇪🇨",
+}
+
 // ─── Stat display helpers ──────────────────────────────────────────────────────
 
 export function getStatGroupedByPosition(position: Position): {

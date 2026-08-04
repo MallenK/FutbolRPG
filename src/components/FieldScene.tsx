@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { Canvas, useFrame, useThree } from "@react-three/fiber"
+import { Canvas, useFrame } from "@react-three/fiber"
 import * as THREE from "three"
 import { ResultadoDecision } from "@/engine/types"
 import { TIER_HEX, resultadoToHex } from "@/lib/tier-colors"
+import PlayerFigure from "./PlayerFigure"
+import CameraLookAt from "./CameraLookAt"
 
 export type FieldScenePhase = "idle" | "acting" | "result"
 
@@ -15,18 +17,10 @@ interface FieldSceneProps {
 }
 
 const BG_COLOR = "#030712" // gray-950, matches the app background exactly
-const CAMERA_TARGET = new THREE.Vector3(0, 0.85, -2.8)
+const CAMERA_TARGET: [number, number, number] = [0, 0.85, -2.8]
 const PLAYER_START = new THREE.Vector3(0, 0, 1.6)
 const BALL_REST = new THREE.Vector3(0.32, 0.16, 1.4)
 const GOAL_Z = -5.5
-
-function CameraRig() {
-  const { camera } = useThree()
-  useEffect(() => {
-    camera.lookAt(CAMERA_TARGET)
-  }, [camera])
-  return null
-}
 
 type Reaction = "step" | "jump" | "slump" | "stumble"
 
@@ -45,21 +39,6 @@ function tierOutcome(resultado: ResultadoDecision | undefined, gol: boolean | un
     default:
       return { travel: 0, side: 0, arc: 0, reaction: "step" as Reaction }
   }
-}
-
-function Player() {
-  return (
-    <group>
-      <mesh position={[0, 0.75, 0]} castShadow>
-        <capsuleGeometry args={[0.26, 0.55, 4, 8]} />
-        <meshStandardMaterial color={TIER_HEX.green} roughness={0.5} />
-      </mesh>
-      <mesh position={[0, 1.32, 0]} castShadow>
-        <sphereGeometry args={[0.2, 14, 14]} />
-        <meshStandardMaterial color="#e8b98a" roughness={0.6} />
-      </mesh>
-    </group>
-  )
 }
 
 function Goal() {
@@ -191,7 +170,7 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
       <Pitch />
       <Goal />
       <group ref={playerRef} position={PLAYER_START}>
-        <Player />
+        <PlayerFigure kitColor={TIER_HEX.green} />
       </group>
       <mesh ref={ballRef} position={BALL_REST}>
         <sphereGeometry args={[0.19, 16, 16]} />
@@ -214,7 +193,7 @@ export default function FieldScene({ phase, resultado, gol }: FieldSceneProps) {
       <ambientLight intensity={0.55} />
       <directionalLight position={[3, 5, 3]} intensity={1.2} castShadow />
       <pointLight position={[-2, 2, 2]} intensity={0.35} color={TIER_HEX.green} />
-      <CameraRig />
+      <CameraLookAt target={CAMERA_TARGET} />
       <Scene phase={phase} resultado={resultado} gol={gol} />
     </Canvas>
   )

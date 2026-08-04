@@ -9,6 +9,8 @@ import { getDivisionInfo, type Division } from "@/lib/world"
 
 type RpgFields = {
   apellido?: string
+  apodo?: string
+  dorsal?: number
   piernaDominante?: string
   altura?: number
   peso?: number
@@ -18,15 +20,21 @@ type RpgFields = {
   estiloJuego?: string
   traits?: string[]
   potencial?: number
+  clubElegido?: string
 }
 
 function buildInitialState(division: Division, rpg?: RpgFields) {
   const divInfo = getDivisionInfo(division)
-  const club = divInfo.clubes[0]
+  const club = rpg?.clubElegido && divInfo.clubes.includes(rpg.clubElegido)
+    ? rpg.clubElegido
+    : divInfo.clubes[0]
+  const dorsal = Math.max(1, Math.min(99, Math.round(rpg?.dorsal ?? 10)))
   return {
     fatiga: 0, forma: 80, moral: 85, riesgoLesion: 5,
     confianza: { entrenador: 60, vestuario: 50, reputacion: 40 },
     // RPG fields stored at root of state
+    apodo: rpg?.apodo?.trim() || undefined,
+    dorsal,
     origen: rpg?.origen ?? "academia",
     personalidad: rpg?.personalidad ?? "profesional",
     estiloJuego: rpg?.estiloJuego ?? "",

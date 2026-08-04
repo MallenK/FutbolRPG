@@ -76,6 +76,7 @@ function mapDbPlayer(dbPlayer: DbPlayer): Player {
     origen?: string; personalidad?: string; estiloJuego?: string
     traits?: string[]; potencial?: number
     piernaDominante?: string; altura?: number; peso?: number
+    apodo?: string; dorsal?: number
   }
 
   const fillStats = (group: Record<string, number>, defaults: Record<string, number>): Record<string, number> => {
@@ -90,13 +91,14 @@ function mapDbPlayer(dbPlayer: DbPlayer): Player {
     id: dbPlayer.id,
     personal: {
       nombre: dbPlayer.name,
+      apodo: state.apodo,
       edad: dbPlayer.age,
       nacionalidad: dbPlayer.nationality,
       genero: "M",
       piernaDominante: (state.piernaDominante as "derecho"|"izquierdo"|"ambidiestro") ?? "derecho",
       altura: state.altura ?? 180,
       peso: state.peso ?? 75,
-      dorsal: 10,
+      dorsal: state.dorsal ?? 10,
       fechaNacimiento: "",
       cantera: "Academia",
       representante: "",
@@ -480,7 +482,7 @@ function MatchPageInner() {
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-500">
-              {enginePlayer?.personal.nombre} ·{" "}
+              {enginePlayer?.personal.apodo ? `"${enginePlayer.personal.apodo}"` : enginePlayer?.personal.nombre} ·{" "}
               {POSICION_LABELS[enginePlayer?.posicionPrincipal ?? Posicion.DELANTERO]}
             </p>
             <p className="text-xs text-gray-600">
