@@ -6,7 +6,7 @@ import { useSession } from "@/lib/auth-client"
 import StatBar from "@/components/StatBar"
 import {
   POSITIONS, NATIONALITIES, NATIONALITY_FLAGS,
-  ORIGINS, PERSONALITIES, PLAY_STYLES, SELECTABLE_TRAITS,
+  ORIGINS, PERSONALITIES, PLAY_STYLES, SELECTABLE_TRAITS, getSelectableTraits,
   FOOT_OPTIONS, POSITION_STAT_PROFILES, STAT_BY_KEY, BASE_STATS,
   buildAttributes,
   type Position, type OriginId, type PersonalityId, type DominantFoot, type StatKey,
@@ -105,7 +105,7 @@ export default function CreatePlayerPage() {
   const [personality, setPersonality] = useState<PersonalityId>("profesional")
 
   // Step 5: Traits + extra points
-  const [selectedTrait, setSelectedTrait] = useState<string>(SELECTABLE_TRAITS[0].id)
+  const [selectedTrait, setSelectedTrait] = useState<string>(getSelectableTraits("ST")[0].id)
   const [extras, setExtras] = useState<Partial<Record<StatKey, number>>>({})
   const [pointsLeft, setPointsLeft] = useState(EXTRA_POINTS)
 
@@ -117,6 +117,14 @@ export default function CreatePlayerPage() {
   useEffect(() => {
     setPlayStyle(PLAY_STYLES[position][0].id)
   }, [position])
+
+  // Keep the selected trait valid for the current position
+  useEffect(() => {
+    const available = getSelectableTraits(position)
+    if (!available.some((t) => t.id === selectedTrait)) {
+      setSelectedTrait(available[0].id)
+    }
+  }, [position, selectedTrait])
 
   // Reset club choice when division changes
   useEffect(() => {
@@ -450,7 +458,7 @@ export default function CreatePlayerPage() {
             <div>
               <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Elige tu rasgo especial</p>
               <div className="grid grid-cols-2 gap-2">
-                {SELECTABLE_TRAITS.map((t) => (
+                {getSelectableTraits(position).map((t) => (
                   <button key={t.id} onClick={() => setSelectedTrait(t.id)}
                     className={`text-left p-3 rounded-xl border transition-colors ${selectedTrait === t.id ? "border-yellow-500 bg-yellow-500/10" : "border-gray-700 bg-gray-900 hover:border-gray-500"}`}
                   >

@@ -296,6 +296,7 @@ export type Trait = {
   descripcion: string
   efecto: string          // description for UI
   sourceable: boolean     // can be selected at creation
+  positions?: Position[]  // which positions can pick this at creation; omitted = all positions
 }
 
 export const TRAITS: Trait[] = [
@@ -304,18 +305,23 @@ export const TRAITS: Trait[] = [
   { id: "improvisador",        nombre: "Improvisador",          descripcion: "Aprendiste en la calle. La creatividad es tu arma.",                    efecto: "+3 al dado en situaciones de regate/1v1",       sourceable: false },
   { id: "fisico_excepcional",  nombre: "Físico Excepcional",    descripcion: "Tu cuerpo es tu mayor arma.",                                           efecto: "Fatiga acumula un 25% más lento",               sourceable: false },
   { id: "lector_del_juego",    nombre: "Lector del Juego",      descripcion: "Anticipas jugadas antes de que ocurran.",                               efecto: "+3 al dado en decisiones tácticas",             sourceable: false },
-  // Selectable at creation (choose 1)
-  { id: "goleador_nato",       nombre: "Goleador Nato",         descripcion: "El gol es tu lenguaje materno.",                                        efecto: "+4 al dado en situaciones de gol",              sourceable: true },
-  { id: "killer_pass",         nombre: "Killer Pass",           descripcion: "Ves el pase que nadie más ve.",                                         efecto: "+4 al dado en asistencias y pases de último tercio", sourceable: true },
+  // Selectable at creation (choose 1) — position-gated so only traits that make football
+  // sense for the chosen position are offered (a goalkeeper doesn't get "Goleador Nato").
+  { id: "goleador_nato",       nombre: "Goleador Nato",         descripcion: "El gol es tu lenguaje materno.",                                        efecto: "+4 al dado en situaciones de gol",              sourceable: true, positions: ["AM", "W", "ST"] },
+  { id: "killer_pass",         nombre: "Killer Pass",           descripcion: "Ves el pase que nadie más ve.",                                         efecto: "+4 al dado en asistencias y pases de último tercio", sourceable: true, positions: ["FB", "CM", "AM", "W"] },
   { id: "jugador_de_presion",  nombre: "Jugador de Presión",    descripcion: "Cuando más aprieta el partido, más creces.",                            efecto: "+3 al dado cuando el equipo va perdiendo",      sourceable: true },
-  { id: "velocista",           nombre: "Velocista",             descripcion: "Nadie te pilla cuando arrancas.",                                       efecto: "+5 velocidad efectiva en situaciones de sprint", sourceable: true },
-  { id: "penalty_expert",      nombre: "Especialista en Penaltis", descripcion: "Los penaltis son tuyos.",                                             efecto: "Penaltis siempre resultan en gol",              sourceable: true },
+  { id: "velocista",           nombre: "Velocista",             descripcion: "Nadie te pilla cuando arrancas.",                                       efecto: "+5 velocidad efectiva en situaciones de sprint", sourceable: true, positions: ["CB", "FB", "CM", "AM", "W", "ST"] },
+  { id: "penalty_expert",      nombre: "Especialista en Penaltis", descripcion: "Los penaltis son tuyos.",                                             efecto: "Penaltis siempre resultan en gol",              sourceable: true, positions: ["CB", "FB", "CM", "AM", "W", "ST"] },
   { id: "lider_vestuario",     nombre: "Líder del Vestuario",   descripcion: "Tu presencia cambia la energía del grupo.",                             efecto: "+8 moral del equipo tras cada victoria",        sourceable: true },
   { id: "polivalente",         nombre: "Polivalente",           descripcion: "Puedes jugar en varias posiciones sin perder nivel.",                   efecto: "Puedes actuar en una posición secundaria sin penalización", sourceable: true },
   { id: "mentalidad_acero",    nombre: "Mentalidad de Acero",   descripcion: "Las críticas te resbalan. Tu cabeza es tu mejor arma.",                 efecto: "Eventos de prensa no afectan negativamente a la moral", sourceable: true },
 ]
 
 export const SELECTABLE_TRAITS = TRAITS.filter((t) => t.sourceable)
+
+export function getSelectableTraits(position: Position): Trait[] {
+  return SELECTABLE_TRAITS.filter((t) => !t.positions || t.positions.includes(position))
+}
 
 // ─── Foot dominance ───────────────────────────────────────────────────────────
 
