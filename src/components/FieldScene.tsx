@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import * as THREE from "three"
 import { ResultadoDecision } from "@/engine/types"
@@ -110,6 +110,19 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
     )
   }, [key, phase, resultado])
 
+  // Which named clip from the Kenney rig should play for the current phase/outcome.
+  // The character's own animation now carries the acting (arms, legs); the group
+  // transforms below stay limited to whole-body movement (hop height, step forward).
+  const characterAnimation = useMemo(() => {
+    if (phase !== "result") return "idle"
+    switch (tierOutcome(resultado, gol).reaction) {
+      case "jump": return "emote-yes"
+      case "stumble": return "die"
+      case "slump": return "emote-no"
+      default: return "attack-kick-right"
+    }
+  }, [phase, resultado, gol])
+
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
     tRef.current += delta
@@ -119,14 +132,11 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
     if (!player || !ball) return
 
     if (phase === "idle") {
-      player.position.set(PLAYER_START.x, Math.sin(t * 2) * 0.04, PLAYER_START.z)
-      player.rotation.set(0, 0, 0)
+      player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
       ball.position.copy(BALL_REST)
       ball.rotation.y += delta * 0.6
     } else if (phase === "acting") {
-      const lean = Math.min(t / 0.4, 1) * 0.15
-      player.position.set(PLAYER_START.x, Math.sin(t * 8) * 0.02, PLAYER_START.z)
-      player.rotation.set(lean, 0, 0)
+      player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
       ball.position.set(BALL_REST.x, BALL_REST.y + Math.sin(t * 10) * 0.02, BALL_REST.z)
     } else {
       const { travel, side, arc, reaction } = tierOutcome(resultado, gol)
@@ -142,18 +152,11 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
 
       if (reaction === "jump") {
         const hop = Math.sin(Math.min(t, 0.6) / 0.6 * Math.PI)
-        player.position.set(PLAYER_START.x, Math.max(hop, 0) * 0.35, PLAYER_START.z)
-        player.rotation.set(0, 0, 0)
-      } else if (reaction === "stumble") {
-        const wobble = Math.sin(Math.min(t, 0.5) / 0.5 * Math.PI)
-        player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
-        player.rotation.set(0, 0, wobble * 0.4)
-      } else if (reaction === "slump") {
-        player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
-        player.rotation.set(Math.min(t / 0.5, 1) * 0.25, 0, 0)
-      } else {
+        player.position.set(PLAYER_START.x, Math.max(hop, 0) * 0.3, PLAYER_START.z)
+      } else if (reaction === "step") {
         player.position.set(PLAYER_START.x, 0, PLAYER_START.z - Math.min(t, 0.4) * 0.3)
-        player.rotation.set(0, 0, 0)
+      } else {
+        player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
       }
     }
 
@@ -170,7 +173,7 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
       <Pitch />
       <Goal />
       <group ref={playerRef} position={PLAYER_START}>
-        <PlayerFigure kitColor={TIER_HEX.green} />
+        <PlayerFigure kitColor={TIER_HEX.green} animation={characterAnimation} />
       </group>
       <mesh ref={ballRef} position={BALL_REST}>
         <sphereGeometry args={[0.19, 16, 16]} />

@@ -14,7 +14,7 @@ interface PlayerAvatarPreviewProps {
 }
 
 const BG_COLOR = "#030712" // gray-950, matches the app background exactly
-const CAMERA_TARGET: [number, number, number] = [0, 0.55, 0]
+const CAMERA_TARGET: [number, number, number] = [0, 0.65, 0]
 
 function Turntable({ kitColor, heightScale, buildScale }: Required<PlayerAvatarPreviewProps>) {
   const ref = useRef<THREE.Group>(null)
@@ -35,7 +35,7 @@ export default function PlayerAvatarPreview({
 }: PlayerAvatarPreviewProps) {
   return (
     <Canvas
-      camera={{ position: [0, 0.7, 2.4], fov: 38 }}
+      camera={{ position: [0, 0.7, 3.4], fov: 38 }}
       gl={{ antialias: true }}
       dpr={[1, 1.5]}
       onCreated={({ gl }) => gl.setClearColor(BG_COLOR)}
