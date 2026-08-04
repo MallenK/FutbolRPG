@@ -1,11 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback, Suspense } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import DiceRoll from "@/components/DiceRoll"
 import DecisionCard from "@/components/DecisionCard"
 import ResultReveal from "@/components/ResultReveal"
+
+const FieldScene = dynamic(() => import("@/components/FieldScene"), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gray-950 animate-pulse" />,
+})
 import {
   initMatchState,
   getSituacionForTurn,
@@ -512,6 +518,16 @@ function MatchPageInner() {
             <span className={`text-xs ml-auto ${matchContext.tipo === "seleccion" || matchContext.tipo === "seleccion_torneo" ? "text-red-300/40" : "text-yellow-300/40"}`}>
               vs {matchContext.rival} · {matchContext.esLocal ? "Local" : "Visitante"}
             </span>
+          </div>
+        )}
+
+        {(phase === "situation" || phase === "rolling" || phase === "result") && (
+          <div className="w-full h-44 sm:h-56 rounded-2xl border border-gray-800 overflow-hidden">
+            <FieldScene
+              phase={phase === "rolling" ? "acting" : phase === "result" ? "result" : "idle"}
+              resultado={lastResult?.resultado}
+              gol={lastResult?.gol}
+            />
           </div>
         )}
 

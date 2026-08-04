@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import * as THREE from "three"
+import { TIER_HEX } from "@/lib/tier-colors"
 
 export type DicePhase = "idle" | "rolling" | "done"
 
@@ -11,14 +12,14 @@ interface Dice3DProps {
   finalValue: number
 }
 
-const NEUTRAL_COLOR = "#9ca3af" // gray-400, matches the resting/rolling tone
+const NEUTRAL_COLOR = TIER_HEX.neutral
 
 const TIER_COLORS: [threshold: number, color: string][] = [
-  [18, "#facc15"], // yellow-400 — crítico
-  [13, "#4ade80"], // green-400 — suerte
-  [8, "#60a5fa"],  // blue-400 — normal
-  [4, "#fb923c"],  // orange-400 — mala suerte
-  [0, "#ef4444"],  // red-500 — pifia
+  [18, TIER_HEX.yellow], // crítico
+  [13, TIER_HEX.green],  // suerte
+  [8, TIER_HEX.blue],    // normal
+  [4, TIER_HEX.orange],  // mala suerte
+  [0, TIER_HEX.red],     // pifia
 ]
 
 function tierColorFor(value: number): string {
