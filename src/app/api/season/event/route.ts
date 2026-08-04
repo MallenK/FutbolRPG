@@ -40,6 +40,10 @@ export async function POST(req: NextRequest) {
 
   const currentConfianza = (state.confianza as Record<string, number>) ?? {}
 
+  // "Mentalidad de Acero": press events never lower morale (other effects still apply)
+  const inmuneAPrensaNegativa = evento.tipo === "PRENSA" && currentTraits.includes("mentalidad_acero")
+  const moralDelta = inmuneAPrensaNegativa ? Math.max(0, fx.moral ?? 0) : (fx.moral ?? 0)
+
   const newConfianza = {
     ...currentConfianza,
     entrenador: clamp((currentConfianza.entrenador ?? 60) + (fx.confianza_entrenador ?? 0)),
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
 
   const newState = {
     ...state,
-    moral: clamp(currentMoral + (fx.moral ?? 0)),
+    moral: clamp(currentMoral + moralDelta),
     forma: clamp(currentForma + (fx.forma ?? 0)),
     fatiga: clamp(currentFatiga + (fx.fatiga ?? 0)),
     riesgoLesion: clamp(currentRiesgo + (fx.riesgoLesion ?? 0)),

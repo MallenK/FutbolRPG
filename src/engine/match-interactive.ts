@@ -1543,7 +1543,8 @@ export const resolveDecisionWithDice = (
       [ResultadoDecision.FALLO]: 0,
       [ResultadoDecision.CRITICO_FALLO]: 0,
     }
-    if (Math.random() < golChances[resultado]) {
+    const penaltyAlwaysScores = situacion.id === "penalti" && player.traits.includes("penalty_expert")
+    if (penaltyAlwaysScores || Math.random() < golChances[resultado]) {
       gol = true
       marcador.local++
       valoracionDelta += resultado === ResultadoDecision.PERFECTO ? 1.5 : 1.2

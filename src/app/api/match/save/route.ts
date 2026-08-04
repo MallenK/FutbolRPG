@@ -100,6 +100,12 @@ export async function POST(req: NextRequest) {
 
   const updatedCarrera = ((updatedState as Record<string, unknown>)?.carrera as Record<string, unknown>) ?? {}
 
+  // "Líder del Vestuario": +8 moral after every win
+  const currentTraits = (currentState.traits as string[]) ?? []
+  const currentMoral = (currentState.moral as number) ?? 85
+  const moralBonus = ganado && currentTraits.includes("lider_vestuario") ? 8 : 0
+  const newMoral = Math.max(0, Math.min(100, currentMoral + moralBonus))
+
   // ── Liga: advance jornada and possibly generate an event ──────────────────
   let jornadaActual = (carrera?.jornadaActual as number) ?? 0
   let fixtures = (carrera?.fixtures as Fixture[]) ?? []
@@ -241,6 +247,7 @@ export async function POST(req: NextRequest) {
     xp: newXP,
     level: newLevel,
     attributePoints: newAttrPoints,
+    moral: newMoral,
     carrera: newCarrera,
   }
 
