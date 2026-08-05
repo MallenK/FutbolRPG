@@ -244,6 +244,7 @@ function MatchPageInner() {
   const [diceRoll, setDiceRoll] = useState(1)
   const [diceRolling, setDiceRolling] = useState(false)
   const [lastResult, setLastResult] = useState<TurnResult | null>(null)
+  const [lastEncajado, setLastEncajado] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [geminiNarrative, setGeminiNarrative] = useState<string | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
@@ -291,6 +292,7 @@ function MatchPageInner() {
       matchState.marcador,
     )
     setLastResult(result)
+    setLastEncajado(result.marcador.visitante > matchState.marcador.visitante)
     setMatchState((prev) => ({
       ...prev,
       marcador: result.marcador,
@@ -529,6 +531,8 @@ function MatchPageInner() {
               phase={phase === "rolling" ? "acting" : phase === "result" ? "result" : "idle"}
               resultado={lastResult?.resultado}
               gol={lastResult?.gol}
+              peligroPropio={situacion?.peligroPropio}
+              encajado={lastEncajado}
             />
           </div>
         )}
@@ -536,8 +540,14 @@ function MatchPageInner() {
         {(phase === "situation" || phase === "rolling") && situacion && (
           <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-bold text-green-400 bg-green-400/10 px-2 py-1 rounded-full">
-                {situacion.esOportunidadGol ? "OPORTUNIDAD DE GOL" : "JUGADA"}
+              <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                situacion.peligroPropio
+                  ? "text-red-400 bg-red-400/10"
+                  : situacion.esOportunidadGol
+                    ? "text-green-400 bg-green-400/10"
+                    : "text-gray-400 bg-gray-400/10"
+              }`}>
+                {situacion.peligroPropio ? "PELIGRO EN TU ÁREA" : situacion.esOportunidadGol ? "OPORTUNIDAD DE GOL" : "JUGADA"}
               </span>
               <span className="text-xs text-gray-500">min. {situacion.minuto}</span>
             </div>

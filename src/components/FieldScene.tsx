@@ -14,6 +14,11 @@ interface FieldSceneProps {
   phase: FieldScenePhase
   resultado?: ResultadoDecision
   gol?: boolean
+  // Turno de portero defendiendo su propia portería (ver Situacion.peligroPropio
+  // en match-interactive.ts): la pelota viaja hacia la portería en vez de alejarse
+  // de ella, y "encajado" (no el tramo del resultado) decide si entra o se para.
+  peligroPropio?: boolean
+  encajado?: boolean
 }
 
 const BG_COLOR = "#030712" // gray-950, matches the app background exactly
@@ -36,6 +41,34 @@ function tierOutcome(resultado: ResultadoDecision | undefined, gol: boolean | un
       return { travel: 2.8, side: 1.9, arc: 0.45, reaction: "slump" as Reaction }
     case ResultadoDecision.CRITICO_FALLO:
       return { travel: 1.1, side: -1.6, arc: 0.25, reaction: "stumble" as Reaction }
+    default:
+      return { travel: 0, side: 0, arc: 0, reaction: "step" as Reaction }
+  }
+}
+
+// Same ball-travel mechanic as tierOutcome, read backwards: for a save the ball
+// is stopped early (short travel); for a conceded goal it completes the full
+// distance to the net. Severity comes from "encajado", not the result tier alone,
+// since e.g. a FALLO still saves 55% of the time (see peligroPropio branch in
+// resolveDecisionWithDice).
+function tierOutcomePortero(resultado: ResultadoDecision | undefined, encajado: boolean | undefined) {
+  if (encajado) {
+    if (resultado === ResultadoDecision.CRITICO_FALLO) {
+      return { travel: 7.0, side: 0, arc: 0.25, reaction: "stumble" as Reaction }
+    }
+    return { travel: 6.6, side: 0.8, arc: 0.45, reaction: "slump" as Reaction }
+  }
+  switch (resultado) {
+    case ResultadoDecision.PERFECTO:
+      return { travel: 0.9, side: 0, arc: 0.25, reaction: "jump" as Reaction }
+    case ResultadoDecision.EXITO:
+      return { travel: 1.6, side: 0.3, arc: 0.3, reaction: "step" as Reaction }
+    case ResultadoDecision.PARCIAL:
+      return { travel: 2.4, side: 0.6, arc: 0.35, reaction: "step" as Reaction }
+    case ResultadoDecision.FALLO:
+      return { travel: 3.0, side: 1.0, arc: 0.4, reaction: "step" as Reaction }
+    case ResultadoDecision.CRITICO_FALLO:
+      return { travel: 3.4, side: -1.1, arc: 0.4, reaction: "step" as Reaction }
     default:
       return { travel: 0, side: 0, arc: 0, reaction: "step" as Reaction }
   }
@@ -90,7 +123,7 @@ function Pitch() {
   )
 }
 
-function Scene({ phase, resultado, gol }: FieldSceneProps) {
+function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldSceneProps) {
   const playerRef = useRef<THREE.Group>(null)
   const ballRef = useRef<THREE.Mesh>(null)
   const ballMatRef = useRef<THREE.MeshStandardMaterial>(null)
@@ -115,13 +148,16 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
   // transforms below stay limited to whole-body movement (hop height, step forward).
   const characterAnimation = useMemo(() => {
     if (phase !== "result") return "idle"
-    switch (tierOutcome(resultado, gol).reaction) {
+    const reaction = peligroPropio
+      ? tierOutcomePortero(resultado, encajado).reaction
+      : tierOutcome(resultado, gol).reaction
+    switch (reaction) {
       case "jump": return "emote-yes"
       case "stumble": return "die"
       case "slump": return "emote-no"
-      default: return "attack-kick-right"
+      default: return peligroPropio ? "idle" : "attack-kick-right"
     }
-  }, [phase, resultado, gol])
+  }, [phase, resultado, gol, peligroPropio, encajado])
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
@@ -139,7 +175,9 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
       player.position.set(PLAYER_START.x, 0, PLAYER_START.z)
       ball.position.set(BALL_REST.x, BALL_REST.y + Math.sin(t * 10) * 0.02, BALL_REST.z)
     } else {
-      const { travel, side, arc, reaction } = tierOutcome(resultado, gol)
+      const { travel, side, arc, reaction } = peligroPropio
+        ? tierOutcomePortero(resultado, encajado)
+        : tierOutcome(resultado, gol)
       const progress = Math.min(t / 1.1, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
 
@@ -173,7 +211,7 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
       <Pitch />
       <Goal />
       <group ref={playerRef} position={PLAYER_START}>
-        <PlayerFigure kitColor={TIER_HEX.green} animation={characterAnimation} />
+        <PlayerFigure kitColor={peligroPropio ? TIER_HEX.yellow : TIER_HEX.green} animation={characterAnimation} />
       </group>
       <mesh ref={ballRef} position={BALL_REST}>
         <sphereGeometry args={[0.19, 16, 16]} />
@@ -183,7 +221,7 @@ function Scene({ phase, resultado, gol }: FieldSceneProps) {
   )
 }
 
-export default function FieldScene({ phase, resultado, gol }: FieldSceneProps) {
+export default function FieldScene({ phase, resultado, gol, peligroPropio, encajado }: FieldSceneProps) {
   return (
     <Canvas
       shadows
@@ -197,7 +235,7 @@ export default function FieldScene({ phase, resultado, gol }: FieldSceneProps) {
       <directionalLight position={[3, 5, 3]} intensity={1.2} castShadow />
       <pointLight position={[-2, 2, 2]} intensity={0.35} color={TIER_HEX.green} />
       <CameraLookAt target={CAMERA_TARGET} />
-      <Scene phase={phase} resultado={resultado} gol={gol} />
+      <Scene phase={phase} resultado={resultado} gol={gol} peligroPropio={peligroPropio} encajado={encajado} />
     </Canvas>
   )
 }

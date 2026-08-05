@@ -1,5 +1,6 @@
 import {
   Player,
+  Posicion,
   DecisionOption,
   DecisionContext,
   ResultadoDecision,
@@ -14,6 +15,9 @@ export interface Situacion {
   contexto: DecisionContext
   opciones: DecisionOption[]
   esOportunidadGol: boolean
+  // Situación defensiva sobre la propia portería (portero): fallar aquí puede
+  // encajar un gol real, no dar una oportunidad de gol propio.
+  peligroPropio?: boolean
 }
 
 export interface TurnResult {
@@ -1455,6 +1459,308 @@ const SITUACIONES: Situacion[] = [
       },
     ],
   },
+
+  // ── PORTERO (peligro sobre la propia portería) ──────────────────────
+  {
+    id: "parada_reflejos",
+    descripcion: "Disparo raso y potente desde la frontal del área. Apenas tienes una fracción de segundo para reaccionar.",
+    minuto: 0,
+    contexto: { dificultadBase: 50, presionSituacional: 45, bonusContexto: 0 },
+    esOportunidadGol: false,
+    peligroPropio: true,
+    opciones: [
+      {
+        id: "estirada_mano_fuerte",
+        texto: "Estirarte al palo con la mano fuerte",
+        tipo: "TECNICO",
+        statPrincipal: "reflejos",
+        pesoStat: 1.1,
+        riesgo: 0.15,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Reflejos felinos. Llegas a un balón que parecía imposible y lo desvías a córner. ¡Paradón!",
+            "Estirada perfecta. La mano fuerte llega justo a tiempo para sacar el balón del ángulo.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Llegas al balón con lo justo. Buena parada, aunque sale algo de rebote.",
+            "La estirada es a tiempo. El balón se estrella en tus guantes.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Tocas el balón pero no puedes controlarlo. Rebota peligrosamente cerca del área pequeña.",
+            "Llegas tarde a la estirada completa, pero rozas lo suficiente para desviar a córner.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Calculas mal la trayectoria. El balón pasa cerca de tu mano sin que puedas hacer nada más.",
+            "La estirada llega tarde. El balón se te escapa hacia el fondo de la red.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te tiras al lado equivocado. El balón entra por donde tú ya no estás. Desastre.",
+            "Un fallo de bulto: ni siquiera llegas a rozarlo. Gol evitable donde los haya.",
+          ],
+        },
+      },
+      {
+        id: "cerrar_angulo_cuerpo",
+        texto: "Cerrar el ángulo y bloquear con el cuerpo",
+        tipo: "SEGURO",
+        statPrincipal: "colocacion",
+        pesoStat: 1.15,
+        riesgo: 0.1,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Tu colocación deja al rematador sin ángulo. El disparo se estrella en tu pecho sin que ni te muevas.",
+            "Achicas tan bien el espacio que el disparo va directo a tu cuerpo. Parada de manual.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Bien plantado. El balón te da en el cuerpo y cae controlado a tus pies.",
+            "La posición es buena. El disparo no encuentra hueco y lo bloqueas.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Bloqueas el disparo pero el rechace queda suelto en el área. Momento de peligro.",
+            "El cuerpo detiene el balón, pero se te escapa hacia el lateral sin control.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te colocas mal y dejas hueco al primer palo. El balón pasa junto a ti.",
+            "Achicas tarde. El disparo encuentra el ángulo que habías dejado libre.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te quedas completamente descolocado. El disparo entra por donde debía estar tu cuerpo.",
+            "Un error de posición flagrante. El delantero no podía pedir un ángulo más fácil.",
+          ],
+        },
+      },
+      {
+        id: "volar_palo_contrario",
+        texto: "Volar al palo contrario a puños",
+        tipo: "AGRESIVO",
+        statPrincipal: "agilidad",
+        pesoStat: 0.95,
+        riesgo: 0.35,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Vuelo espectacular. Alcanzas un balón que iba a la escuadra contraria y lo mandas a córner. ¡Aplausos del estadio!",
+            "Salto felino al palo contrario. Sacas el balón con los puños en el último instante.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Llegas volando y despejas, aunque el aterrizaje es incómodo.",
+            "El vuelo es arriesgado pero efectivo. Sacas el balón fuera.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Llegas a tocar el balón en el aire pero no consigues despejarlo del todo. Rebote peligroso.",
+            "El vuelo te deja fuera de posición tras el toque. El balón queda suelto.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Calculas mal el salto. El balón pasa por debajo de tu vuelo.",
+            "Te lanzas demasiado tarde. El disparo ya ha entrado cuando llegas.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Un vuelo desastroso: saltas al lado equivocado y el balón entra por el hueco que dejaste.",
+            "Te resbalas en el salto. Ni siquiera llegas a intentar el desvío. Gol evitable.",
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "salida_al_centro",
+    descripcion: "Centro bombeado desde la banda hacia tu área. Tienes que decidir en un instante: salir o quedarte en la línea.",
+    minuto: 0,
+    contexto: { dificultadBase: 46, presionSituacional: 30, bonusContexto: 0 },
+    esOportunidadGol: false,
+    peligroPropio: true,
+    opciones: [
+      {
+        id: "salir_a_punos",
+        texto: "Salir a puños entre los delanteros",
+        tipo: "TACTICO",
+        statPrincipal: "decisiones",
+        pesoStat: 1.0,
+        riesgo: 0.3,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Sales en el momento exacto y despejas de puños por encima de todos. Autoridad total en tu área.",
+            "Lectura perfecta del centro. Sales, despejas y el peligro desaparece por completo.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Sales a tiempo y despejas, aunque el rechace no llega muy lejos.",
+            "Buena decisión de salida. El puño despeja lo peor del peligro.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Sales pero llegas justo. El despeje queda corto, cerca de un rival.",
+            "El puño solo roza el balón. Queda suelto dentro del área.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Sales tarde. El delantero te gana la posición en el aire antes de que llegues.",
+            "Calculas mal la trayectoria del centro. Sales al vacío.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Sales sin necesidad y no llegas al balón. Dejas la portería vacía. Catástrofe.",
+            "Chocas con tu propio defensa al salir. El balón queda libre para el rival, sin nadie en la portería.",
+          ],
+        },
+      },
+      {
+        id: "quedarse_linea",
+        texto: "Quedarte en la línea y ordenar al defensa",
+        tipo: "SEGURO",
+        statPrincipal: "posicionamiento",
+        pesoStat: 1.1,
+        riesgo: 0.1,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Tu colocación en la línea es perfecta. El defensa despeja de cabeza con toda tranquilidad, cubierto por ti.",
+            "Ordenas la marca con precisión. El centro se resuelve sin ningún sobresalto.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Bien plantado. El defensa despeja y tú cubres cualquier rechace.",
+            "La posición es correcta. El centro no genera peligro real.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "El defensa despeja mal y el rechace queda cerca del área pequeña. Tensión.",
+            "Te quedas bien colocado pero el balón pica de forma extraña frente a ti.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te quedas corto en la línea. El defensa se confunde esperando tu salida que no llega.",
+            "Mala lectura de la posición. El remate encuentra un hueco que no cubriste.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te quedas completamente estático, ni sales ni cubres el palo. El remate entra sin oposición.",
+            "Un error de bulto de colocación. El defensa no sabe qué hacer y el rival remata solo.",
+          ],
+        },
+      },
+      {
+        id: "atrapar_por_alto",
+        texto: "Salir a atrapar el balón por alto",
+        tipo: "TECNICO",
+        statPrincipal: "salto",
+        pesoStat: 1.0,
+        riesgo: 0.25,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Saltas por encima de todos y atrapas el balón limpio en el aire. Dominio absoluto del área.",
+            "Vuelo perfecto: atrapas el centro con las dos manos sin que nadie más lo toque.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Atrapas el balón, aunque con algo de apuro entre varios jugadores.",
+            "El salto llega a tiempo. Controlas el centro con las manos.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Tocas el balón en el salto pero no consigues atraparlo. Cae suelto en el área.",
+            "El salto es correcto pero el balón se te escurre de las manos.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Saltas tarde. Un rival te gana la posición en el aire antes de que llegues.",
+            "Calculas mal el salto. El balón pasa por encima de tus manos.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Un salto desastroso: ni rozas el balón y dejas el área completamente descubierta.",
+            "Chocas con un rival al saltar. El balón queda suelto sin oposición alguna.",
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "mano_a_mano_portero",
+    descripcion: "El delantero rival se planta solo ante ti tras superar a la defensa. Mano a mano. Todo depende de este instante.",
+    minuto: 0,
+    contexto: { dificultadBase: 55, presionSituacional: 50, bonusContexto: 0 },
+    esOportunidadGol: false,
+    peligroPropio: true,
+    opciones: [
+      {
+        id: "achicar_angulo",
+        texto: "Achicar espacio y cerrar el ángulo de tiro",
+        tipo: "TACTICO",
+        statPrincipal: "posicionamiento",
+        pesoStat: 1.1,
+        riesgo: 0.2,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Achicas el ángulo a la perfección. El delantero no encuentra hueco y dispara directo a tu cuerpo.",
+            "Tu salida deja al rematador sin espacio. El disparo muere en tus manos.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Buena salida. El ángulo se reduce lo suficiente para que el disparo no encuentre hueco.",
+            "Te plantas bien. El delantero dispara con poco margen y bloqueas.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Achicas el ángulo pero el disparo se cuela por donde no esperabas. Rechace en el área.",
+            "La salida es correcta pero el delantero encuentra un hueco pequeño. El balón roza el poste.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Sales con el ángulo equivocado. El delantero dispara al hueco que dejaste libre.",
+            "Calculas mal la distancia. El rematador tiene todo el ángulo para definir.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Sales de forma completamente errática. Dejas la portería abierta de par en par.",
+            "Un cálculo desastroso de la salida. El delantero define a placer.",
+          ],
+        },
+      },
+      {
+        id: "aguantar_de_pie",
+        texto: "Aguantar de pie sin anticiparte",
+        tipo: "SEGURO",
+        statPrincipal: "concentracion",
+        pesoStat: 1.0,
+        riesgo: 0.15,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Aguantas de pie con una calma absoluta. El delantero se precipita y dispara directo a ti.",
+            "Tu concentración es total. Esperas hasta el último instante y el rematador se equivoca de decisión.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Aguantas bien la posición. El delantero duda y el disparo no es tan peligroso.",
+            "Tu paciencia da resultado. El disparo llega con menos precisión de la esperada.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Aguantas pero el delantero encuentra un hueco pequeño. El balón roza el palo al salir.",
+            "La espera es correcta pero el rematador te sorprende con un cambio de ritmo.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te quedas quieto demasiado tiempo. El delantero define con comodidad.",
+            "Pierdes la concentración un instante. El disparo te sorprende mal colocado.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Un despiste total. Ni siquiera reaccionas al disparo. Gol sin oposición.",
+            "Pierdes la referencia del delantero por completo. Define sin ninguna dificultad.",
+          ],
+        },
+      },
+      {
+        id: "lanzarse_a_los_pies",
+        texto: "Lanzarte a los pies para robar el balón",
+        tipo: "AGRESIVO",
+        statPrincipal: "reflejos",
+        pesoStat: 0.9,
+        riesgo: 0.45,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Te lanzas con un timing perfecto y te llevas el balón limpio, sin tocar al delantero. Salida de manual.",
+            "Anticipas el control rival y te tiras a sus pies. Robo perfecto, sin falta.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Te lanzas a tiempo y sacas el balón, aunque con algo de contacto.",
+            "El desesperado se convierte en efectivo: te llevas el balón antes del disparo.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Llegas al balón pero se queda suelto entre los dos. Momento de máxima tensión.",
+            "Tocas el balón en la salida pero no lo controlas. Rebote incierto.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te lanzas demasiado pronto. El delantero te supera y define a placer.",
+            "Calculas mal el momento. Te quedas tendido mientras el rival remata.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te lanzas tarde y encima cometes penalti. El árbitro no duda en señalarlo.",
+            "Un error grosero: te tiras al aire sin tocar el balón. El delantero define a portería vacía.",
+          ],
+        },
+      },
+    ],
+  },
 ]
 
 const getTargetDifficulty = (turno: number): number => {
@@ -1475,9 +1781,17 @@ export const getSituacionForTurn = (turno: number, player: Player): Situacion =>
   if (player.estado.fatiga > 50) baseDC += 5
   baseDC = Math.round(Math.max(30, Math.min(80, baseDC)))
 
-  const pool = baseDC > 65
-    ? SITUACIONES.filter((s) => s.esOportunidadGol)
-    : SITUACIONES
+  const esPortero = player.posicionPrincipal === Posicion.PORTERO
+  let pool: Situacion[]
+  if (esPortero) {
+    // El portero nunca ataca — solo defiende su propia portería.
+    pool = SITUACIONES.filter((s) => s.peligroPropio)
+  } else {
+    const situacionesDeCampo = SITUACIONES.filter((s) => !s.peligroPropio)
+    pool = baseDC > 65
+      ? situacionesDeCampo.filter((s) => s.esOportunidadGol)
+      : situacionesDeCampo
+  }
 
   const template = pool[Math.floor(Math.random() * pool.length)]
   const minuto = Math.round((turno / 5) * 90)
@@ -1554,6 +1868,25 @@ export const resolveDecisionWithDice = (
     if (resultado === ResultadoDecision.FALLO || resultado === ResultadoDecision.CRITICO_FALLO) {
       valoracionDelta -= 0.5
     }
+  } else if (situacion.peligroPropio) {
+    // Situación defensiva sobre la propia portería: no hay "asistencia" que valga,
+    // fallar aquí significa encajar un gol real. Mucho más severo que cualquier otro fallo.
+    const concederChances: Record<ResultadoDecision, number> = {
+      [ResultadoDecision.PERFECTO]: 0,
+      [ResultadoDecision.EXITO]: 0,
+      [ResultadoDecision.PARCIAL]: 0.05,
+      [ResultadoDecision.FALLO]: 0.45,
+      [ResultadoDecision.CRITICO_FALLO]: 0.85,
+    }
+    if (Math.random() < concederChances[resultado]) {
+      marcador.visitante++
+      valoracionDelta -= resultado === ResultadoDecision.CRITICO_FALLO ? 1.5 : 1.0
+    } else {
+      valoracionDelta += resultado === ResultadoDecision.PERFECTO ? 1.2
+        : resultado === ResultadoDecision.EXITO ? 0.6
+        : resultado === ResultadoDecision.PARCIAL ? 0.1
+        : 0
+    }
   } else {
     if (resultado === ResultadoDecision.PERFECTO) {
       asistencia = true
@@ -1576,6 +1909,7 @@ export const getStatLabel = (statKey: string): string => {
     velocidad: "VEL", aceleracion: "ACE", resistencia: "RES", fuerza: "FUE",
     posicionamiento: "POS", vision: "VIS", decisiones: "DEC",
     disciplina: "DIS", confianza: "CON", presion: "PRE",
+    reflejos: "REF", colocacion: "COL", agilidad: "AGI", salto: "SAL", concentracion: "CNT",
   }
   return labels[statKey] ?? statKey.toUpperCase().slice(0, 3)
 }
