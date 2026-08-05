@@ -1878,7 +1878,8 @@ export const resolveDecisionWithDice = (
       [ResultadoDecision.FALLO]: 0.45,
       [ResultadoDecision.CRITICO_FALLO]: 0.85,
     }
-    if (Math.random() < concederChances[resultado]) {
+    const muroFactor = player.traits.includes("muro_infranqueable") ? 0.5 : 1
+    if (Math.random() < concederChances[resultado] * muroFactor) {
       marcador.visitante++
       valoracionDelta -= resultado === ResultadoDecision.CRITICO_FALLO ? 1.5 : 1.0
     } else {
