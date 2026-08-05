@@ -1803,6 +1803,29 @@ export const getSituacionForTurn = (turno: number, player: Player): Situacion =>
   }
 }
 
+// Rasgos con efecto "+N al dado" (el texto que ve el jugador en el Paso 5 de creación).
+// Viven aquí y no en decision.ts/getTraitBonus porque resolveDecisionWithDice —el motor
+// que resuelve el partido interactivo real— tiene su propia fórmula y nunca pasa por
+// calculateScore; getTraitBonus/personalityBonus de decision.ts no se ejecutan jamás
+// desde el partido real ni desde la simulación rápida (ver hallazgo documentado en
+// context.md, sección 8). Se suman al d20 antes de aplicar la curva de suerte, no
+// directamente al score, para que "al dado" sea literal.
+function getTraitDiceBonus(
+  player: Player,
+  opcion: DecisionOption,
+  situacion: Situacion,
+  currentMarcador: { local: number; visitante: number },
+): number {
+  const traits = player.traits ?? []
+  let bonus = 0
+  if (traits.includes("goleador_nato") && situacion.esOportunidadGol) bonus += 4
+  if (traits.includes("killer_pass") && !situacion.esOportunidadGol && !situacion.peligroPropio) bonus += 4
+  if (traits.includes("jugador_de_presion") && currentMarcador.visitante > currentMarcador.local) bonus += 3
+  if (traits.includes("lector_del_juego") && opcion.tipo === "TACTICO") bonus += 3
+  if (traits.includes("improvisador") && opcion.statPrincipal === "regate") bonus += 3
+  return bonus
+}
+
 export const resolveDecisionWithDice = (
   opcion: DecisionOption,
   player: Player,
@@ -1811,7 +1834,10 @@ export const resolveDecisionWithDice = (
   currentMarcador: { local: number; visitante: number }
 ): TurnResult => {
   const context = situacion.contexto
-  const statValue = resolveStatValue(opcion.statPrincipal, player)
+  const velocistaBonus = (player.traits ?? []).includes("velocista")
+    && (opcion.statPrincipal === "velocidad" || opcion.statPrincipal === "aceleracion")
+    ? 5 : 0
+  const statValue = resolveStatValue(opcion.statPrincipal, player) + velocistaBonus
   const statContribution = statValue * opcion.pesoStat
   const difficultyPenalty = context.dificultadBase
   const skillDifference = statContribution - difficultyPenalty
@@ -1820,7 +1846,9 @@ export const resolveDecisionWithDice = (
   const confidenceMod = (player.mentales.confianza - 50) * 0.15
   const pressureResistance = player.mentales.presion / 100
   const effectivePressure = context.presionSituacional * (1 - pressureResistance * 0.6)
-  const randomFactor = Math.round((diceRoll - 10) * 0.65)
+  const traitDiceBonus = getTraitDiceBonus(player, opcion, situacion, currentMarcador)
+  const effectiveDiceRoll = Math.min(20, diceRoll + traitDiceBonus)
+  const randomFactor = Math.round((effectiveDiceRoll - 10) * 0.65)
 
   const rawScore =
     50 + skillDifference + formMod - fatigueMod + confidenceMod - effectivePressure +
