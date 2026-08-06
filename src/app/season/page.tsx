@@ -150,13 +150,21 @@ export default function SeasonPage() {
 
     const paronActivo = (carrera.seleccion as SeleccionState | undefined)?.paron?.activo
 
+    // Defensa contra calendarios cortos/corruptos (ver informe-fallos.md C5):
+    // si la jornada actual no tiene un partido programado — típicamente
+    // porque `fixtures` se generó con menos de 16 entradas en algún momento
+    // anterior del historial de la cuenta — no hay nada que jugar ya, así que
+    // se trata la liga como terminada en vez de dejar la pantalla en blanco
+    // sin ninguna opción.
+    const hayPartidoEstaJornada = ps.carrera.fixtures.some((f) => f.jornada === jornadaActual)
+
     if (jornadaActual === 0 || ps.carrera.fixtures.length === 0) {
       setPhase("no_season")
     } else if (carrera.eventoActual) {
       setPhase("event")
     } else if (paronActivo) {
       setPhase("paron")
-    } else if (jornadaActual <= 16) {
+    } else if (jornadaActual <= 16 && hayPartidoEstaJornada) {
       setPhase("next_match")
     } else {
       // La temporada ha terminado — este aviso es transversal a cualquier
