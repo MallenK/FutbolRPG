@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { type CareerEvent, type OpcionEvento } from "@/engine/career-events"
 import { getEventNarrative, getSeasonNarrative } from "@/lib/narrative"
+import VideoLoader from "@/components/VideoLoader"
 import {
   getDivisionInfo,
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
+  EUROPA_COMPETICION_ABBR,
   type CopaState,
   type EuropaState,
   type SeleccionState,
@@ -68,6 +70,10 @@ type SeasonPhase = "loading" | "no_season" | "event" | "paron" | "next_match" | 
 type SeasonSummary = {
   temporada: number; club: string; stats: Record<string, number>
   premios: string[]; rolAnterior: string; rolNuevo: string; subioRol: boolean
+  liga?: {
+    posicionFinal: number; totalEquipos: number; cambioDivision: "ascenso" | "descenso" | "ninguno"
+    clubAnterior: string; clubNuevo: string; divisionAnterior: number; divisionNueva: number; ligaNueva: string
+  }
   seleccion?: { capas: number; goles: number; torneoTipo: string | null; campeon: boolean }
   contrato?: { expiraba: boolean; temporadasRestantes: number }
   edadRetiro?: boolean
@@ -86,8 +92,21 @@ export default function SeasonPage() {
   const [resolving, setResolving] = useState(false)
   const [summary, setSummary] = useState<SeasonSummary | null>(null)
   const [endingLoading, setEndingLoading] = useState(false)
+  const [endError, setEndError] = useState<string | null>(null)
+  const [showEndWarning, setShowEndWarning] = useState(false)
   const [seasonNarrative, setSeasonNarrative] = useState<string | null>(null)
   const [seasonNarrativeLoading, setSeasonNarrativeLoading] = useState(false)
+  const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
+
+  useEffect(() => {
+    if (!session) return
+    // Ofertas reales de otros usuarios (sistema separado de carrera.mercado,
+    // ver informe-fallos.md C3) — sin esto, nunca se avisa de que existen.
+    fetch("/api/market")
+      .then((r) => r.json())
+      .then((data) => setPendingMarketOffers(data?.myOfferCount ?? 0))
+      .catch(() => {})
+  }, [session])
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -140,6 +159,11 @@ export default function SeasonPage() {
     } else if (jornadaActual <= 16) {
       setPhase("next_match")
     } else {
+      // La temporada ha terminado — este aviso es transversal a cualquier
+      // pestaña, así que siempre se muestra en "Liga" para que nunca quede
+      // oculto detrás de la pestaña de Copa/Europa/Selección que tuvieras
+      // seleccionada (esas pestañas ya reflejan la temporada siguiente).
+      setTab("liga")
       setPhase("season_over")
     }
   }, [router])
@@ -197,35 +221,68 @@ export default function SeasonPage() {
     setGeminiEventLoading(false)
   }
 
-  const handleEndSeason = async () => {
-    setEndingLoading(true)
-    const res = await fetch("/api/season/end", { method: "POST" })
-    const data = await res.json()
-    const resumen = data.resumen
-    setSummary(resumen)
-    setPhase("season_summary")
-    setEndingLoading(false)
+  // Copa/Europa no están sincronizadas con las 16 jornadas de liga — es normal
+  // acabar la liga sin haberlas terminado. Terminar la temporada las descarta
+  // (api/season/end genera Copa/Europa nuevas para la temporada siguiente), así
+  // que avisamos antes en vez de hacerlo en silencio.
+  const copaSinTerminar = (copa?: CopaState) => !!copa && !copa.eliminado && !copa.campeon
+  const europaSinTerminar = (europa?: EuropaState) => {
+    if (!europa) return false
+    const grupoTerminado = europa.grupoPartidos.every((p) => p.jugado)
+    if (!grupoTerminado) return true
+    if (!europa.clasificado) return false // eliminado en fase de grupos, ya resuelto
+    const el = europa.eliminatoria
+    if (!el) return true // clasificado pero la eliminatoria todavía no se ha jugado
+    return !el.eliminado && !el.campeon
+  }
 
-    if (playerState) {
-      setSeasonNarrativeLoading(true)
-      getSeasonNarrative({
-        playerName: playerState.name,
-        playerPosition: playerState.position,
-        club: playerState.carrera.club,
-        rol: resumen.rolNuevo ?? playerState.carrera.rol,
-        temporada: resumen.temporada,
-        age: playerState.age,
-        goles: resumen.stats?.goles ?? 0,
-        asistencias: resumen.stats?.asistencias ?? 0,
-        valoracionMedia: resumen.stats?.valoracionMedia ?? 6.0,
-        premios: resumen.premios ?? [],
-        subioRol: resumen.subioRol ?? false,
-        torneoSeleccion: resumen.seleccion?.torneoTipo ?? null,
-        campeonSeleccion: resumen.seleccion?.campeon ?? false,
-      }).then((text) => {
-        setSeasonNarrative(text)
-        setSeasonNarrativeLoading(false)
-      })
+  const handleRequestEndSeason = () => {
+    setEndError(null)
+    const { copa, europa } = playerState?.carrera ?? {}
+    if (copaSinTerminar(copa) || europaSinTerminar(europa)) {
+      setShowEndWarning(true)
+      return
+    }
+    handleEndSeason()
+  }
+
+  const handleEndSeason = async () => {
+    setShowEndWarning(false)
+    setEndingLoading(true)
+    setEndError(null)
+    try {
+      const res = await fetch("/api/season/end", { method: "POST" })
+      if (!res.ok) throw new Error("request failed")
+      const data = await res.json()
+      const resumen = data.resumen
+      setSummary(resumen)
+      setPhase("season_summary")
+
+      if (playerState) {
+        setSeasonNarrativeLoading(true)
+        getSeasonNarrative({
+          playerName: playerState.name,
+          playerPosition: playerState.position,
+          club: playerState.carrera.club,
+          rol: resumen.rolNuevo ?? playerState.carrera.rol,
+          temporada: resumen.temporada,
+          age: playerState.age,
+          goles: resumen.stats?.goles ?? 0,
+          asistencias: resumen.stats?.asistencias ?? 0,
+          valoracionMedia: resumen.stats?.valoracionMedia ?? 6.0,
+          premios: resumen.premios ?? [],
+          subioRol: resumen.subioRol ?? false,
+          torneoSeleccion: resumen.seleccion?.torneoTipo ?? null,
+          campeonSeleccion: resumen.seleccion?.campeon ?? false,
+        }).then((text) => {
+          setSeasonNarrative(text)
+          setSeasonNarrativeLoading(false)
+        })
+      }
+    } catch {
+      setEndError("No se pudo cerrar la temporada. Comprueba tu conexión e inténtalo de nuevo.")
+    } finally {
+      setEndingLoading(false)
     }
   }
 
@@ -238,7 +295,7 @@ export default function SeasonPage() {
   if (isPending || phase === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando temporada...</div>
+        <VideoLoader label="Cargando temporada..." />
       </div>
     )
   }
@@ -280,8 +337,11 @@ export default function SeasonPage() {
           </button>
         </div>
 
-        {/* Tab switcher */}
-        {phase !== "no_season" && (showCopa || showEuropa || showSeleccion) && (
+        {/* Tab switcher — oculto al terminar la temporada: el resumen y el botón
+            para empezar la siguiente son transversales a cualquier competición,
+            así que no tiene sentido dejar que una pestaña los tape (ver C1 en
+            informe-fallos.md) */}
+        {phase !== "no_season" && phase !== "season_over" && phase !== "season_summary" && (showCopa || showEuropa || showSeleccion) && (
           <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setTab("liga")}
@@ -314,7 +374,7 @@ export default function SeasonPage() {
                   tab === "europa" ? "bg-blue-500 text-black" : "text-gray-400 hover:text-white"
                 }`}
               >
-                {europa ? (EUROPA_COMPETICION_LABELS[europa.competicion]?.split(" ").slice(-1)[0] ?? "Europa") : "Europa"}
+                {europa ? (EUROPA_COMPETICION_ABBR[europa.competicion] ?? "Europa") : "Europa"}
               </button>
             )}
             {showSeleccion && (
@@ -499,12 +559,30 @@ export default function SeasonPage() {
               </div>
             )}
 
-            {/* Transfer notification */}
+            {/* Real market offers (from other users, /mercado) */}
+            {pendingMarketOffers > 0 && phase !== "season_summary" && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-green-400 font-bold text-sm">
+                    {pendingMarketOffers} oferta{pendingMarketOffers > 1 ? "s" : ""} de mercado
+                  </p>
+                  <p className="text-green-300/60 text-xs">Otro jugador quiere ficharte</p>
+                </div>
+                <button
+                  onClick={() => router.push("/mercado")}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-lg text-xs transition-colors"
+                >
+                  Ver →
+                </button>
+              </div>
+            )}
+
+            {/* Transfer notification (NPC club offers) */}
             {hasTransferOffers && phase !== "season_summary" && (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
                 <div>
                   <p className="text-yellow-400 font-bold text-sm">
-                    {mercado!.ofertasActivas.length} oferta{mercado!.ofertasActivas.length > 1 ? "s" : ""} de traspaso
+                    {mercado!.ofertasActivas.length} oferta{mercado!.ofertasActivas.length > 1 ? "s" : ""} de club
                   </p>
                   <p className="text-yellow-300/60 text-xs">Tienes propuestas esperando respuesta</p>
                 </div>
@@ -565,13 +643,43 @@ export default function SeasonPage() {
                     </div>
                   ))}
                 </div>
-                <button
-                  onClick={handleEndSeason}
-                  disabled={endingLoading}
-                  className="px-8 py-3 bg-green-500 hover:bg-green-400 disabled:bg-green-800 text-black font-bold rounded-xl transition-colors"
-                >
-                  {endingLoading ? "Calculando..." : "Ver resumen de temporada →"}
-                </button>
+                {showEndWarning && (
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-left space-y-3">
+                    <p className="text-orange-300 text-sm font-semibold">
+                      Todavía tienes {copaSinTerminar(carrera.copa) && europaSinTerminar(carrera.europa)
+                        ? "Copa del Rey y competición europea"
+                        : copaSinTerminar(carrera.copa) ? "Copa del Rey" : "competición europea"} sin terminar esta temporada.
+                    </p>
+                    <p className="text-orange-300/70 text-xs">
+                      Si terminas la temporada ahora, se dará por perdida la oportunidad de ganar ese título este año — la próxima temporada empieza una eliminatoria nueva.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowEndWarning(false)}
+                        className="flex-1 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                      >
+                        Seguir jugando esta temporada
+                      </button>
+                      <button
+                        onClick={handleEndSeason}
+                        disabled={endingLoading}
+                        className="flex-1 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black text-sm font-bold rounded-lg transition-colors"
+                      >
+                        {endingLoading ? "Calculando..." : "Terminar de todos modos"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {!showEndWarning && (
+                  <button
+                    onClick={handleRequestEndSeason}
+                    disabled={endingLoading}
+                    className="px-8 py-3 bg-green-500 hover:bg-green-400 disabled:bg-green-800 text-black font-bold rounded-xl transition-colors"
+                  >
+                    {endingLoading ? "Calculando..." : "Ver resumen de temporada →"}
+                  </button>
+                )}
+                {endError && <p className="text-red-400 text-sm">{endError}</p>}
               </div>
             )}
 
@@ -618,6 +726,34 @@ export default function SeasonPage() {
                           <span className="text-yellow-300 font-semibold text-sm">{p}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {summary.liga && (
+                    <div className={`rounded-xl px-4 py-3 flex items-center gap-3 border ${
+                      summary.liga.cambioDivision === "ascenso"
+                        ? "bg-green-500/10 border-green-500/30"
+                        : summary.liga.cambioDivision === "descenso"
+                          ? "bg-red-500/10 border-red-500/30"
+                          : "bg-gray-800/60 border-gray-700"
+                    }`}>
+                      <span className="text-xl">
+                        {summary.liga.cambioDivision === "ascenso" ? "🏆" : summary.liga.cambioDivision === "descenso" ? "📉" : "📊"}
+                      </span>
+                      <div>
+                        <p className={`font-bold text-sm ${
+                          summary.liga.cambioDivision === "ascenso" ? "text-green-300"
+                          : summary.liga.cambioDivision === "descenso" ? "text-red-300" : "text-gray-300"
+                        }`}>
+                          {summary.liga.posicionFinal}º de {summary.liga.totalEquipos}
+                          {summary.liga.cambioDivision === "ascenso" && " · ¡Ascenso!"}
+                          {summary.liga.cambioDivision === "descenso" && " · Descenso"}
+                        </p>
+                        {summary.liga.cambioDivision !== "ninguno" && (
+                          <p className={`text-xs ${summary.liga.cambioDivision === "ascenso" ? "text-green-400/70" : "text-red-400/70"}`}>
+                            {summary.liga.clubAnterior} → {summary.liga.clubNuevo} ({summary.liga.ligaNueva})
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                   {summary.subioRol && (

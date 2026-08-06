@@ -43,7 +43,11 @@ export async function GET(req: Request) {
   const entries: LeaderboardEntry[] = rows.map((r, i) => {
     const state = r.state as Record<string, unknown>
     const carrera = (state?.carrera ?? {}) as Record<string, unknown>
-    const stats = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
+    const statsTemporada = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
+    const statsCarrera = (carrera?.estadisticasCarrera ?? {}) as Record<string, number>
+    // Goles de carrera = temporadas ya cerradas (acumulado) + la temporada en curso
+    // (todavía no volcada al acumulado) — ver informe-fallos.md B1.
+    const golesCarrera = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
     return {
       rank: i + 1,
       playerName: r.playerName,
@@ -53,7 +57,7 @@ export async function GET(req: Request) {
       level: (state?.level as number) ?? 1,
       reputation: (carrera?.reputacion as number) ?? 0,
       seasons: (carrera?.temporada as number) ?? 1,
-      goals: (stats?.goles as number) ?? 0,
+      goals: golesCarrera,
     }
   })
 

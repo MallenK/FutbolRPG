@@ -109,6 +109,49 @@ export function getDefaultClub(division: number): string {
   return getDivisionInfo(division).clubes[0]
 }
 
+// ─── Ascenso / descenso de división ────────────────────────────────────────────
+// El resto de la liga no se simula partido a partido (los rivales no juegan entre
+// sí en este motor) — para poder colocar al jugador en una clasificación final
+// real, se generan resultados plausibles para los demás clubes de su división.
+
+export type TablaEntry = { club: string; puntos: number; esJugador: boolean }
+
+export function calcularPuntosLiga(fixtures: { jugado: boolean; resultado: string | null }[]): number {
+  let puntos = 0
+  for (const f of fixtures) {
+    if (!f.jugado || !f.resultado) continue
+    const [misGoles, golesRival] = f.resultado.split("-").map((n) => parseInt(n, 10) || 0)
+    puntos += misGoles > golesRival ? 3 : misGoles === golesRival ? 1 : 0
+  }
+  return puntos
+}
+
+export function simularTablaFinal(division: Division, clubJugador: string, puntosJugador: number): TablaEntry[] {
+  const info = getDivisionInfo(division)
+  const rivales = info.clubes.filter((c) => c !== clubJugador)
+  const tabla: TablaEntry[] = [{ club: clubJugador, puntos: puntosJugador, esJugador: true }]
+  for (const rival of rivales) {
+    // 16 partidos fantasma con probabilidades de resultado realistas (40% victoria / 30% empate / 30% derrota)
+    let puntos = 0
+    for (let i = 0; i < 16; i++) {
+      const r = Math.random()
+      puntos += r < 0.4 ? 3 : r < 0.7 ? 1 : 0
+    }
+    tabla.push({ club: rival, puntos, esJugador: false })
+  }
+  return tabla.sort((a, b) => b.puntos - a.puntos)
+}
+
+export function resolverAscensoDescenso(
+  division: Division,
+  posicion: number,
+  totalEquipos: number,
+): { nuevaDivision: Division; resultado: "ascenso" | "descenso" | "ninguno" } {
+  if (posicion <= 2 && division < 5) return { nuevaDivision: (division + 1) as Division, resultado: "ascenso" }
+  if (posicion > totalEquipos - 2 && division > 1) return { nuevaDivision: (division - 1) as Division, resultado: "descenso" }
+  return { nuevaDivision: division, resultado: "ninguno" }
+}
+
 
 // ─── Copa del Rey ─────────────────────────────────────────────────────────────
 
@@ -211,6 +254,14 @@ export const EUROPA_COMPETICION_LABELS: Record<EuropaCompeticion, string> = {
   champions: "UEFA Champions League",
   europa: "UEFA Europa League",
   conference: "UEFA Conference League",
+}
+
+// Las 3 competiciones terminan en "League" — no se puede abreviar cogiendo la
+// última palabra del label largo (ver informe-fallos.md M1), hace falta un mapa explícito.
+export const EUROPA_COMPETICION_ABBR: Record<EuropaCompeticion, string> = {
+  champions: "UCL",
+  europa: "UEL",
+  conference: "UECL",
 }
 
 const EUROPA_RIVAL_POOLS: Record<EuropaCompeticion, string[]> = {

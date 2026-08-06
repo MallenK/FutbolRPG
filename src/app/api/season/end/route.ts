@@ -7,8 +7,12 @@ import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
 import {
   getRivales,
+  getDivisionInfo,
   generateCopaState,
   generateEuropaState,
+  calcularPuntosLiga,
+  simularTablaFinal,
+  resolverAscensoDescenso,
   type CopaState,
   type EuropaState,
   type Division,
@@ -92,6 +96,17 @@ export async function POST() {
 
   const premios = calcularPremios(statsTemporada ?? {}, valoracionMedia, copaState, europaState, seleccionState)
 
+  // Acumulado de carrera (ver informe-fallos.md B1): estadisticasTemporada se
+  // resetea a 0 más abajo, así que hay que sumar lo de esta temporada antes de
+  // perderlo — si no, el leaderboard "de carrera" volvería a 0 cada temporada.
+  const statsCarreraPrevias = (carrera.estadisticasCarrera as Record<string, number> | undefined)
+    ?? { partidosJugados: 0, goles: 0, asistencias: 0 }
+  const newEstadisticasCarrera = {
+    partidosJugados: statsCarreraPrevias.partidosJugados + (statsTemporada?.partidosJugados ?? 0),
+    goles: statsCarreraPrevias.goles + (statsTemporada?.goles ?? 0),
+    asistencias: statsCarreraPrevias.asistencias + (statsTemporada?.asistencias ?? 0),
+  }
+
   const currentRol = (carrera.rol as Rol) ?? "Rotación"
   const newRol = valoracionMedia >= 7.5
     ? nextRol(currentRol, true)
@@ -99,12 +114,26 @@ export async function POST() {
       ? nextRol(currentRol, false)
       : currentRol
 
-  const division = (carrera.divisionActual as number) ?? 3
+  const division = ((carrera.divisionActual as number) ?? 3) as Division
   const currentClub = (carrera.club as string) ?? ""
-  const rivals = getRivales(division, currentClub)
+
+  // Ascenso/descenso según la clasificación final de la liga que acaba de cerrarse.
+  const fixturesJugados = (carrera.fixtures as { jugado: boolean; resultado: string | null }[]) ?? []
+  const puntosJugador = calcularPuntosLiga(fixturesJugados)
+  const tablaFinal = simularTablaFinal(division, currentClub, puntosJugador)
+  const posicionFinal = tablaFinal.findIndex((e) => e.esJugador) + 1
+  const { nuevaDivision, resultado: cambioDivision } = resolverAscensoDescenso(division, posicionFinal, tablaFinal.length)
+
+  const finalDivision = nuevaDivision
+  const finalClub = cambioDivision === "ninguno"
+    ? currentClub
+    : getDivisionInfo(finalDivision).clubes[Math.floor(Math.random() * getDivisionInfo(finalDivision).clubes.length)]
+  const finalLiga = getDivisionInfo(finalDivision).nombre
+
+  const rivals = getRivales(finalDivision, finalClub)
   const newFixtures = generateFixtures(rivals)
   const newCopa = generateCopaState()
-  const newEuropa = generateEuropaState(division as Division)
+  const newEuropa = generateEuropaState(finalDivision)
 
   const newTemporada = ((carrera.temporada as number) ?? 1) + 1
   const newAge = ((found.age as number) ?? 18) + 1
@@ -216,7 +245,7 @@ export async function POST() {
   const newSeleccion: SeleccionState | undefined = seleccionState
     ? {
         ...seleccionState,
-        convocado: newReputacion >= 35 && division >= 3,
+        convocado: newReputacion >= 35 && finalDivision >= 3,
         paron: undefined,
       }
     : undefined
@@ -232,6 +261,10 @@ export async function POST() {
     copa: newCopa,
     europa: newEuropa,
     contrato: newContrato,
+    club: finalClub,
+    liga: finalLiga,
+    divisionActual: finalDivision,
+    estadisticasCarrera: newEstadisticasCarrera,
     ...(newSeleccion ? { seleccion: newSeleccion } : {}),
     ultimosPartidos: [],
     estadisticasTemporada: {
@@ -271,6 +304,8 @@ export async function POST() {
       rolAnterior: currentRol,
       rolNuevo: newRol,
       subioRol,
+      posicionFinal,
+      cambioDivision,
       capasSeleccion: seleccionState?.capas ?? 0,
       torneoGanado: seleccionState?.torneo?.campeon ?? false,
     },
@@ -286,6 +321,16 @@ export async function POST() {
       rolAnterior: currentRol,
       rolNuevo: newRol,
       subioRol,
+      liga: {
+        posicionFinal,
+        totalEquipos: tablaFinal.length,
+        cambioDivision,
+        clubAnterior: currentClub,
+        clubNuevo: finalClub,
+        divisionAnterior: division,
+        divisionNueva: finalDivision,
+        ligaNueva: finalLiga,
+      },
       seleccion: {
         capas: seleccionState?.capas ?? 0,
         goles: seleccionState?.golesSeleccion ?? 0,

@@ -4,20 +4,18 @@ import { player } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
-
-const STAT_GROUPS: Record<string, string> = {
-  control: "tecnicos", pase: "tecnicos", tiro: "tecnicos", regate: "tecnicos", cabeceo: "tecnicos",
-  resistencia: "fisicos", velocidad: "fisicos", aceleracion: "fisicos", fuerza: "fisicos",
-  posicionamiento: "tacticos", vision: "tacticos", decisiones: "tacticos",
-  disciplina: "mentales", confianza: "mentales", presion: "mentales",
-}
+import { STAT_BY_KEY, type StatKey } from "@/lib/player-config"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
   const { stat } = await req.json()
-  const group = STAT_GROUPS[stat as string]
+  // Derivado de STAT_BY_KEY (los 25 stats reales) en vez de una lista aparte
+  // mantenida a mano — una lista duplicada es justo lo que dejó 10 de los 25
+  // stats (incluidos reflejos/colocacion/concentracion/salto, los principales
+  // de portero) sin poder subirse nunca, en completo silencio para el jugador.
+  const group = STAT_BY_KEY[stat as StatKey]?.group
   if (!group) return NextResponse.json({ error: "Invalid stat" }, { status: 400 })
 
   const found = await getPlayerByUserId(session.user.id)

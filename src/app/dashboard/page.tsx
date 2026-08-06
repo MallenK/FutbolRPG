@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import StatBar from "@/components/StatBar"
 import XPBar from "@/components/XPBar"
+import VideoLoader from "@/components/VideoLoader"
 import { POSITION_STAT_PROFILES, STAT_BY_KEY, PERSONALITIES, TRAITS, ORIGINS, type Position } from "@/lib/player-config"
 import { getDivisionInfo } from "@/lib/world"
 
@@ -105,7 +106,9 @@ export default function DashboardPage() {
   const [loadingPlayer, setLoadingPlayer] = useState(true)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [upgrading, setUpgrading] = useState<string | null>(null)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [pendingOffers, setPendingOffers] = useState(0)
+  const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -121,18 +124,28 @@ export default function DashboardPage() {
         const offers = p?.state?.carrera?.mercado?.ofertasActivas ?? []
         setPendingOffers(offers.length)
       })
+    // Ofertas reales de otros usuarios (sistema separado de las de arriba,
+    // ver informe-fallos.md C3) — sin esto, nunca se avisa de que existen.
+    fetch("/api/market")
+      .then((r) => r.json())
+      .then((data) => setPendingMarketOffers(data?.myOfferCount ?? 0))
+      .catch(() => {})
   }, [session])
 
   const handleUpgrade = async (stat: string, group: keyof PlayerData["attributes"]) => {
     if (!player || upgrading) return
     setUpgrading(stat)
+    setUpgradeError(null)
     try {
       const res = await fetch("/api/player/upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stat }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        setUpgradeError("No se pudo mejorar el atributo. Inténtalo de nuevo.")
+        return
+      }
       const { newValue } = await res.json()
       setPlayer((prev) => {
         if (!prev) return prev
@@ -145,6 +158,8 @@ export default function DashboardPage() {
           state: { ...prev.state, attributePoints: prev.state.attributePoints - 1 },
         }
       })
+    } catch {
+      setUpgradeError("No se pudo mejorar el atributo. Comprueba tu conexión e inténtalo de nuevo.")
     } finally {
       setUpgrading(null)
     }
@@ -153,7 +168,7 @@ export default function DashboardPage() {
   if (isPending || loadingPlayer) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando...</div>
+        <VideoLoader label="Cargando..." />
       </div>
     )
   }
@@ -171,12 +186,20 @@ export default function DashboardPage() {
             Futbol<span className="text-green-400">RPG</span>
           </h1>
           <div className="flex items-center gap-3">
+            {pendingMarketOffers > 0 && (
+              <button
+                onClick={() => router.push("/mercado")}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold transition-colors hover:bg-green-500/20"
+              >
+                {pendingMarketOffers} oferta{pendingMarketOffers > 1 ? "s" : ""} de mercado
+              </button>
+            )}
             {pendingOffers > 0 && (
               <button
                 onClick={() => router.push("/transfer")}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-xs font-bold transition-colors hover:bg-yellow-500/20"
               >
-                {pendingOffers} oferta{pendingOffers > 1 ? "s" : ""}
+                {pendingOffers} oferta{pendingOffers > 1 ? "s" : ""} de club
               </button>
             )}
             <button
@@ -260,6 +283,7 @@ export default function DashboardPage() {
                   <h3 className="font-bold text-white">Mejora de atributos</h3>
                   <span className="text-green-400 font-mono font-bold text-sm">{attrPoints} puntos</span>
                 </div>
+                {upgradeError && <p className="text-red-400 text-xs">{upgradeError}</p>}
                 {/* Show primary stats for position first */}
                 {(() => {
                   const posProfile = POSITION_STAT_PROFILES[player.position as Position]

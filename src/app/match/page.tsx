@@ -7,6 +7,7 @@ import { useSession } from "@/lib/auth-client"
 import DiceRoll from "@/components/DiceRoll"
 import DecisionCard from "@/components/DecisionCard"
 import ResultReveal from "@/components/ResultReveal"
+import VideoLoader from "@/components/VideoLoader"
 
 const FieldScene = dynamic(() => import("@/components/FieldScene"), {
   ssr: false,
@@ -333,9 +334,11 @@ function MatchPageInner() {
       const newFatiga = Math.min(100, enginePlayer.estado.fatiga + 20)
       const tipo = matchContext?.tipo ?? "liga"
       const esLocal = matchContext?.esLocal ?? true
-      const playerTeamGoals = esLocal ? matchState.marcador.local : matchState.marcador.visitante
-      const rivalGoals = esLocal ? matchState.marcador.visitante : matchState.marcador.local
-      const ganado = playerTeamGoals > rivalGoals
+      // marcador.local/visitante son siempre "mis goles"/"goles del rival" (así los
+      // llena resolveDecisionWithDice), independientemente de si juegas en casa o
+      // fuera — esLocal solo indica quién es el equipo local a efectos de
+      // visualización, nunca hay que usarlo para decidir cuál marcador es el mío.
+      const ganado = matchState.marcador.local > matchState.marcador.visitante
 
       try {
         await fetch("/api/match/save", {
@@ -351,7 +354,7 @@ function MatchPageInner() {
             updatedState: { fatiga: newFatiga },
             tipo,
             ganado,
-            golesRival: rivalGoals,
+            golesRival: matchState.marcador.visitante,
             esLocal,
           }),
         })
@@ -375,7 +378,7 @@ function MatchPageInner() {
   if (isPending || phase === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando partido...</div>
+        <VideoLoader label="Cargando partido..." />
       </div>
     )
   }
@@ -398,10 +401,10 @@ function MatchPageInner() {
 
   if (phase === "finished") {
     const esLocal = matchContext?.esLocal ?? true
-    const playerTeamGoals = esLocal ? matchState.marcador.local : matchState.marcador.visitante
-    const rivalGoals = esLocal ? matchState.marcador.visitante : matchState.marcador.local
-    const ganado = playerTeamGoals > rivalGoals
-    const empate = playerTeamGoals === rivalGoals
+    // Igual que en handleContinue: marcador.local/visitante ya son "yo"/"rival"
+    // sin importar esLocal — esLocal solo reordena qué número se muestra primero.
+    const ganado = matchState.marcador.local > matchState.marcador.visitante
+    const empate = matchState.marcador.local === matchState.marcador.visitante
 
     const valoracionColor =
       matchState.valoracion >= 7.5 ? "text-yellow-400" :
@@ -624,7 +627,7 @@ export default function MatchPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando partido...</div>
+        <VideoLoader label="Cargando partido..." />
       </div>
     }>
       <MatchPageInner />

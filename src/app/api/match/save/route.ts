@@ -44,7 +44,6 @@ export async function POST(req: NextRequest) {
   const tipo: string = body.tipo ?? "liga"
   const ganado: boolean = body.ganado ?? false
   const golesRival: number = body.golesRival ?? 0
-  const esLocal: boolean = body.esLocal ?? true
 
   const found = await getPlayerByUserId(session.user.id)
   if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
@@ -167,12 +166,10 @@ export async function POST(req: NextRequest) {
   if (tipo === "europa" && europa) {
     const nextGroupMatch = europa.grupoPartidos.find((p) => !p.jugado)
     if (nextGroupMatch) {
-      const golesEquipo = esLocal
-        ? parseInt((matchStats.marcador ?? "0-0").split("-")[0]) || 0
-        : parseInt((matchStats.marcador ?? "0-0").split("-")[1]) || 0
-      const rivalGolesFromMarcador = esLocal
-        ? parseInt((matchStats.marcador ?? "0-0").split("-")[1]) || 0
-        : parseInt((matchStats.marcador ?? "0-0").split("-")[0]) || 0
+      // matchStats.marcador siempre viene como "misGoles-golesRival" (ver match/page.tsx),
+      // nunca depende de si jugabas en casa o fuera — no reordenar con esLocal aquí.
+      const golesEquipo = parseInt((matchStats.marcador ?? "0-0").split("-")[0]) || 0
+      const rivalGolesFromMarcador = parseInt((matchStats.marcador ?? "0-0").split("-")[1]) || 0
       const isEmpate = golesEquipo === rivalGolesFromMarcador
       europa = advanceEuropaGrupo(
         europa, nextGroupMatch.idx, ganado, isEmpate,
@@ -187,12 +184,8 @@ export async function POST(req: NextRequest) {
   // ── Selección Nacional ────────────────────────────────────────────────────
   const marcador = matchStats.marcador ?? "0-0"
   const golesJugador = matchStats.goles ?? 0
-  const golesEquipoSel = esLocal
-    ? parseInt(marcador.split("-")[0]) || 0
-    : parseInt(marcador.split("-")[1]) || 0
-  const golesRivalSel = esLocal
-    ? parseInt(marcador.split("-")[1]) || 0
-    : parseInt(marcador.split("-")[0]) || 0
+  const golesEquipoSel = parseInt(marcador.split("-")[0]) || 0
+  const golesRivalSel = parseInt(marcador.split("-")[1]) || 0
   const empate = golesEquipoSel === golesRivalSel
 
   if (tipo === "seleccion" && seleccion?.paron?.activo) {
