@@ -1823,6 +1823,7 @@ function getTraitDiceBonus(
   if (traits.includes("jugador_de_presion") && currentMarcador.visitante > currentMarcador.local) bonus += 3
   if (traits.includes("lector_del_juego") && opcion.tipo === "TACTICO") bonus += 3
   if (traits.includes("improvisador") && opcion.statPrincipal === "regate") bonus += 3
+  if (traits.includes("anticipacion_defensiva") && situacion.id === "robo_entrada_mediocamp") bonus += 4
   return bonus
 }
 
