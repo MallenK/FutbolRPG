@@ -40,6 +40,7 @@ type PlayerData = {
     peso?: number
     apodo?: string
     dorsal?: number
+    preferencias?: { ocultarAvisoMercado?: boolean }
     carrera: {
       club: string
       liga?: string
@@ -123,13 +124,16 @@ export default function DashboardPage() {
         setLoadingPlayer(false)
         const offers = p?.state?.carrera?.mercado?.ofertasActivas ?? []
         setPendingOffers(offers.length)
+
+        // Ofertas reales de otros usuarios (sistema separado de las de arriba,
+        // ver informe-fallos.md C3) — sin esto, nunca se avisa de que existen.
+        // Se puede desactivar desde Ajustes > Preferencias (ocultarAvisoMercado).
+        if (p?.state?.preferencias?.ocultarAvisoMercado) return
+        fetch("/api/market")
+          .then((r) => r.json())
+          .then((data) => setPendingMarketOffers(data?.myOfferCount ?? 0))
+          .catch(() => {})
       })
-    // Ofertas reales de otros usuarios (sistema separado de las de arriba,
-    // ver informe-fallos.md C3) — sin esto, nunca se avisa de que existen.
-    fetch("/api/market")
-      .then((r) => r.json())
-      .then((data) => setPendingMarketOffers(data?.myOfferCount ?? 0))
-      .catch(() => {})
   }, [session])
 
   const handleUpgrade = async (stat: string, group: keyof PlayerData["attributes"]) => {

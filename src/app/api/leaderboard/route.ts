@@ -40,26 +40,32 @@ export async function GET(req: Request) {
     .orderBy(orderExpr)
     .limit(50)
 
-  const entries: LeaderboardEntry[] = rows.map((r, i) => {
-    const state = r.state as Record<string, unknown>
-    const carrera = (state?.carrera ?? {}) as Record<string, unknown>
-    const statsTemporada = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
-    const statsCarrera = (carrera?.estadisticasCarrera ?? {}) as Record<string, number>
-    // Goles de carrera = temporadas ya cerradas (acumulado) + la temporada en curso
-    // (todavía no volcada al acumulado) — ver informe-fallos.md B1.
-    const golesCarrera = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
-    return {
-      rank: i + 1,
-      playerName: r.playerName,
-      userName: r.userName,
-      position: r.position,
-      club: (carrera?.club as string) ?? "—",
-      level: (state?.level as number) ?? 1,
-      reputation: (carrera?.reputacion as number) ?? 0,
-      seasons: (carrera?.temporada as number) ?? 1,
-      goals: golesCarrera,
-    }
-  })
+  const entries: LeaderboardEntry[] = rows
+    .filter((r) => {
+      const state = r.state as Record<string, unknown>
+      const preferencias = (state?.preferencias ?? {}) as Record<string, unknown>
+      return preferencias.ocultoEnRanking !== true
+    })
+    .map((r, i) => {
+      const state = r.state as Record<string, unknown>
+      const carrera = (state?.carrera ?? {}) as Record<string, unknown>
+      const statsTemporada = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
+      const statsCarrera = (carrera?.estadisticasCarrera ?? {}) as Record<string, number>
+      // Goles de carrera = temporadas ya cerradas (acumulado) + la temporada en curso
+      // (todavía no volcada al acumulado) — ver informe-fallos.md B1.
+      const golesCarrera = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
+      return {
+        rank: i + 1,
+        playerName: r.playerName,
+        userName: r.userName,
+        position: r.position,
+        club: (carrera?.club as string) ?? "—",
+        level: (state?.level as number) ?? 1,
+        reputation: (carrera?.reputacion as number) ?? 0,
+        seasons: (carrera?.temporada as number) ?? 1,
+        goals: golesCarrera,
+      }
+    })
 
   return NextResponse.json({ entries })
 }
