@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import StatBar from "@/components/StatBar"
+import VideoLoader from "@/components/VideoLoader"
 import {
   POSITIONS, NATIONALITIES, NATIONALITY_FLAGS,
   ORIGINS, PERSONALITIES, PLAY_STYLES, SELECTABLE_TRAITS, getSelectableTraits,
@@ -225,7 +226,7 @@ export default function CreatePlayerPage() {
   if (isPending || checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando...</div>
+        <VideoLoader label="Cargando..." />
       </div>
     )
   }

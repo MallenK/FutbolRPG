@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { type TransferOffer } from "@/lib/world"
+import VideoLoader from "@/components/VideoLoader"
 
 type MarketState = {
   mercado: {
@@ -95,7 +96,7 @@ export default function TransferPage() {
   if (isPending || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-gray-400">Cargando mercado...</div>
+        <VideoLoader label="Cargando mercado..." />
       </div>
     )
   }
