@@ -1,5 +1,6 @@
 import { TurnResult } from "@/engine/match-interactive"
 import { getResultColor, getResultLabel } from "@/lib/result-display"
+import VideoLoader from "./VideoLoader"
 
 interface Props {
   result: TurnResult
@@ -28,12 +29,7 @@ export default function ResultReveal({
       <p className="text-gray-300 text-sm max-w-xs leading-relaxed">{result.narrativo}</p>
 
       {/* Gemini narrative */}
-      {geminiLoading && (
-        <div className="w-full max-w-xs space-y-2">
-          <div className="h-3 bg-gray-800 rounded-full animate-pulse w-full" />
-          <div className="h-3 bg-gray-800 rounded-full animate-pulse w-4/5 mx-auto" />
-        </div>
-      )}
+      {geminiLoading && <VideoLoader variant="dice" label="Narrando..." size={88} />}
       {geminiNarrative && !geminiLoading && (
         <div className="w-full max-w-xs bg-gray-800/60 border border-gray-700 rounded-xl px-4 py-3 text-left">
           <p className="text-xs text-green-400 font-bold uppercase tracking-wider mb-1.5">

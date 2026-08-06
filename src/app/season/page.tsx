@@ -482,12 +482,7 @@ export default function SeasonPage() {
             {phase === "event" && eventNarrativo && (
               <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 text-center space-y-5">
                 <p className="text-gray-300 leading-relaxed">{eventNarrativo}</p>
-                {geminiEventLoading && (
-                  <div className="space-y-2 max-w-xs mx-auto">
-                    <div className="h-3 bg-gray-800 rounded-full animate-pulse w-full" />
-                    <div className="h-3 bg-gray-800 rounded-full animate-pulse w-3/4 mx-auto" />
-                  </div>
-                )}
+                {geminiEventLoading && <VideoLoader variant="press" label="Última hora..." size={88} />}
                 {geminiEventNarrative && !geminiEventLoading && (
                   <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-5 py-4 text-left max-w-sm mx-auto">
                     <p className="text-xs text-green-400 font-bold uppercase tracking-wider mb-2">Narrador</p>
@@ -691,13 +686,7 @@ export default function SeasonPage() {
                   <p className="text-gray-400 text-sm">{summary.club}</p>
 
                   {/* Gemini season narrative */}
-                  {seasonNarrativeLoading && (
-                    <div className="space-y-2">
-                      <div className="h-3 bg-gray-800 rounded-full animate-pulse w-full" />
-                      <div className="h-3 bg-gray-800 rounded-full animate-pulse w-4/5" />
-                      <div className="h-3 bg-gray-800 rounded-full animate-pulse w-3/5" />
-                    </div>
-                  )}
+                  {seasonNarrativeLoading && <VideoLoader variant="trophy" label="Cerrando la temporada..." size={88} />}
                   {seasonNarrative && !seasonNarrativeLoading && (
                     <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-5 py-4">
                       <p className="text-xs text-green-400 font-bold uppercase tracking-wider mb-2">Crónica de temporada</p>
