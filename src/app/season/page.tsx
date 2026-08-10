@@ -1,11 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useSession } from "@/lib/auth-client"
 import { type CareerEvent, type OpcionEvento } from "@/engine/career-events"
 import { getEventNarrative, getSeasonNarrative } from "@/lib/narrative"
 import VideoLoader from "@/components/VideoLoader"
+
+const TrophyScene = dynamic(() => import("@/components/TrophyScene"), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gray-950 animate-pulse" />,
+})
 import {
   getDivisionInfo,
   COPA_RONDAS,
@@ -46,7 +52,9 @@ type PlayerState = {
     premios: string[]
     estadisticasTemporada: {
       partidosJugados: number; goles: number; asistencias: number; valoracionMedia: number
+      tarjetasAmarillas?: number; tarjetasRojas?: number
     }
+    sancion?: { partidosRestantes: number }
   }
 }
 
@@ -92,6 +100,7 @@ export default function SeasonPage() {
   const [resolving, setResolving] = useState(false)
   const [summary, setSummary] = useState<SeasonSummary | null>(null)
   const [endingLoading, setEndingLoading] = useState(false)
+  const [resolvingSancion, setResolvingSancion] = useState(false)
   const [endError, setEndError] = useState<string | null>(null)
   const [showEndWarning, setShowEndWarning] = useState(false)
   const [seasonNarrative, setSeasonNarrative] = useState<string | null>(null)
@@ -144,6 +153,7 @@ export default function SeasonPage() {
         estadisticasTemporada: carrera.estadisticasTemporada ?? {
           partidosJugados: 0, goles: 0, asistencias: 0, valoracionMedia: 6.0,
         },
+        sancion: carrera.sancion ?? undefined,
       },
     }
     setPlayerState(ps)
@@ -184,6 +194,14 @@ export default function SeasonPage() {
     setPhase("loading")
     await fetch("/api/season/init", { method: "POST" })
     await loadPlayer()
+  }
+
+  const handleResolveSancion = async () => {
+    if (resolvingSancion) return
+    setResolvingSancion(true)
+    await fetch("/api/season/resolve-sancion", { method: "POST" })
+    await loadPlayer()
+    setResolvingSancion(false)
   }
 
   const handleResolveEvent = async (opcionId: string) => {
@@ -602,6 +620,7 @@ export default function SeasonPage() {
             {phase === "next_match" && (() => {
               const nextFixture = carrera.fixtures.find((f) => f.jornada === carrera.jornadaActual)
               if (!nextFixture) return null
+              const partidosSancion = carrera.sancion?.partidosRestantes ?? 0
               return (
                 <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
                   <p className="text-xs text-gray-500 uppercase tracking-wider">Próximo partido · Jornada {nextFixture.jornada}</p>
@@ -619,12 +638,30 @@ export default function SeasonPage() {
                       {nextFixture.esLocal ? "LOCAL" : "VISITANTE"}
                     </span>
                   </div>
-                  <button
-                    onClick={() => router.push("/match")}
-                    className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
-                  >
-                    Jugar partido →
-                  </button>
+                  {partidosSancion > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                        <span className="text-red-400 text-lg">🟥</span>
+                        <p className="text-red-300 text-sm">
+                          Estás sancionado. El equipo juega este partido sin ti.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleResolveSancion}
+                        disabled={resolvingSancion}
+                        className="w-full py-3 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 text-white font-bold rounded-xl transition-colors"
+                      >
+                        {resolvingSancion ? "Resolviendo..." : "Ver resultado sin mí →"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => router.push("/match")}
+                      className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
+                    >
+                      Jugar partido →
+                    </button>
+                  )}
                 </div>
               )
             })()}
@@ -716,7 +753,10 @@ export default function SeasonPage() {
                   </div>
                   {summary.premios.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Premios</p>
+                      <div className="w-full h-40">
+                        <TrophyScene />
+                      </div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider text-center">Premios</p>
                       {summary.premios.map((p) => (
                         <div key={p} className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-2">
                           <span className="text-yellow-400 text-lg">🏆</span>

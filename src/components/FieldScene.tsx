@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
+import { Sparkles } from "@react-three/drei"
 import * as THREE from "three"
 import { ResultadoDecision } from "@/engine/types"
 import { TIER_HEX, resultadoToHex } from "@/lib/tier-colors"
@@ -19,6 +20,9 @@ interface FieldSceneProps {
   // de ella, y "encajado" (no el tramo del resultado) decide si entra o se para.
   peligroPropio?: boolean
   encajado?: boolean
+  // Tarjeta sacada en este turno (ver TARJETA_OPCIONES en match-interactive.ts) —
+  // FASE D en context.md.
+  tarjeta?: "amarilla" | "roja"
 }
 
 const BG_COLOR = "#030712" // gray-950, matches the app background exactly
@@ -123,7 +127,7 @@ function Pitch() {
   )
 }
 
-function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldSceneProps) {
+function Scene({ phase, resultado, gol, peligroPropio, encajado, tarjeta }: FieldSceneProps) {
   const playerRef = useRef<THREE.Group>(null)
   const ballRef = useRef<THREE.Mesh>(null)
   const ballMatRef = useRef<THREE.MeshStandardMaterial>(null)
@@ -146,18 +150,27 @@ function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldScenePro
   // Which named clip from the Kenney rig should play for the current phase/outcome.
   // The character's own animation now carries the acting (arms, legs); the group
   // transforms below stay limited to whole-body movement (hop height, step forward).
-  const characterAnimation = useMemo(() => {
-    if (phase !== "result") return "idle"
-    const reaction = peligroPropio
+  const reaction = useMemo(() => {
+    if (phase !== "result") return null
+    return peligroPropio
       ? tierOutcomePortero(resultado, encajado).reaction
       : tierOutcome(resultado, gol).reaction
+  }, [phase, resultado, gol, peligroPropio, encajado])
+
+  const characterAnimation = useMemo(() => {
     switch (reaction) {
       case "jump": return "emote-yes"
       case "stumble": return "die"
       case "slump": return "emote-no"
+      case null: return "idle"
       default: return peligroPropio ? "idle" : "attack-kick-right"
     }
-  }, [phase, resultado, gol, peligroPropio, encajado])
+  }, [reaction, peligroPropio])
+
+  // Un gol real se celebra más tiempo que cualquier otro "jump" (una buena
+  // entrada sin gol, una parada de penalti): dos botes en vez de uno, ~1.4s
+  // en vez de 0.6s (ver FASE D en context.md).
+  const celebratingGoal = phase === "result" && gol === true && reaction === "jump"
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
@@ -188,7 +201,16 @@ function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldScenePro
       )
       ball.rotation.x += delta * (4 + travel)
 
-      if (reaction === "jump") {
+      if (reaction === "jump" && gol) {
+        // Bote grande + bote pequeño de asentamiento, más largo que un "jump" normal.
+        const tt = Math.min(t, 1.4)
+        const hop = tt < 0.5
+          ? Math.sin(tt / 0.5 * Math.PI) * 0.42
+          : tt < 0.9
+            ? 0
+            : Math.sin((tt - 0.9) / 0.5 * Math.PI) * 0.16
+        player.position.set(PLAYER_START.x, Math.max(hop, 0), PLAYER_START.z)
+      } else if (reaction === "jump") {
         const hop = Math.sin(Math.min(t, 0.6) / 0.6 * Math.PI)
         player.position.set(PLAYER_START.x, Math.max(hop, 0) * 0.3, PLAYER_START.z)
       } else if (reaction === "step") {
@@ -212,6 +234,15 @@ function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldScenePro
       <Goal />
       <group ref={playerRef} position={PLAYER_START}>
         <PlayerFigure kitColor={peligroPropio ? TIER_HEX.yellow : TIER_HEX.green} animation={characterAnimation} />
+        {celebratingGoal && (
+          <Sparkles count={40} scale={[1.4, 1.8, 1.4]} position={[0, 0.9, 0]} size={4} speed={0.5} color={TIER_HEX.green} />
+        )}
+        {phase === "result" && tarjeta && (
+          <mesh position={[0.55, 1.55, 0.2]} rotation={[0, -0.5, -0.15]}>
+            <planeGeometry args={[0.32, 0.46]} />
+            <meshBasicMaterial color={tarjeta === "roja" ? TIER_HEX.red : TIER_HEX.yellow} side={THREE.DoubleSide} />
+          </mesh>
+        )}
       </group>
       <mesh ref={ballRef} position={BALL_REST}>
         <sphereGeometry args={[0.19, 16, 16]} />
@@ -221,7 +252,7 @@ function Scene({ phase, resultado, gol, peligroPropio, encajado }: FieldScenePro
   )
 }
 
-export default function FieldScene({ phase, resultado, gol, peligroPropio, encajado }: FieldSceneProps) {
+export default function FieldScene({ phase, resultado, gol, peligroPropio, encajado, tarjeta }: FieldSceneProps) {
   return (
     <Canvas
       shadows
@@ -235,7 +266,7 @@ export default function FieldScene({ phase, resultado, gol, peligroPropio, encaj
       <directionalLight position={[3, 5, 3]} intensity={1.2} castShadow />
       <pointLight position={[-2, 2, 2]} intensity={0.35} color={TIER_HEX.green} />
       <CameraLookAt target={CAMERA_TARGET} />
-      <Scene phase={phase} resultado={resultado} gol={gol} peligroPropio={peligroPropio} encajado={encajado} />
+      <Scene phase={phase} resultado={resultado} gol={gol} peligroPropio={peligroPropio} encajado={encajado} tarjeta={tarjeta} />
     </Canvas>
   )
 }

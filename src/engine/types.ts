@@ -81,6 +81,8 @@ export interface StatsTemporada {
   goles: number;
   asistencias: number;
   valoracionMedia: number;
+  tarjetasAmarillas?: number;
+  tarjetasRojas?: number;
 }
 
 export interface MatchStats {

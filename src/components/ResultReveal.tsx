@@ -26,6 +26,21 @@ export default function ResultReveal({
         {label}
       </div>
 
+      {result.gol && (
+        <div className="animate-goal-pop text-5xl font-black uppercase tracking-wider text-yellow-400 drop-shadow-[0_0_18px_rgba(250,204,21,0.5)]">
+          ¡Gol!
+        </div>
+      )}
+
+      {result.tarjeta && (
+        <div className={`animate-goal-pop flex items-center gap-2 font-bold text-lg ${
+          result.tarjeta === "roja" ? "text-red-400" : "text-yellow-400"
+        }`}>
+          <span>{result.tarjeta === "roja" ? "🟥" : "🟨"}</span>
+          <span>Tarjeta {result.tarjeta}</span>
+        </div>
+      )}
+
       <p className="text-gray-300 text-sm max-w-xs leading-relaxed">{result.narrativo}</p>
 
       {/* Gemini narrative */}
@@ -42,11 +57,6 @@ export default function ResultReveal({
       )}
 
       <div className="flex flex-wrap justify-center items-center gap-3 text-sm">
-        {result.gol && (
-          <span className="text-yellow-400 font-bold bg-yellow-400/10 px-3 py-1 rounded-full border border-yellow-400/30">
-            GOL
-          </span>
-        )}
         {result.asistencia && (
           <span className="text-blue-400 font-bold bg-blue-400/10 px-3 py-1 rounded-full border border-blue-400/30">
             ASISTENCIA

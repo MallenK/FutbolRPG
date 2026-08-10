@@ -58,8 +58,9 @@ function buildInitialState(division: Division, rpg?: RpgFields) {
       eventoActual: null,
       premios: [],
       etiquetas: ["Joven Promesa"],
-      estadisticasTemporada: { partidosJugados: 0, goles: 0, asistencias: 0, valoracionMedia: 6.0 },
-      estadisticasCarrera: { partidosJugados: 0, goles: 0, asistencias: 0 },
+      estadisticasTemporada: { partidosJugados: 0, goles: 0, asistencias: 0, valoracionMedia: 6.0, tarjetasAmarillas: 0, tarjetasRojas: 0 },
+      estadisticasCarrera: { partidosJugados: 0, goles: 0, asistencias: 0, tarjetasAmarillas: 0, tarjetasRojas: 0 },
+      sancion: { partidosRestantes: 0 },
       ultimosPartidos: [],
       historial: {
         historialPartidos: [], resumenesTemporadas: [],

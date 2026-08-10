@@ -100,11 +100,13 @@ export async function POST() {
   // resetea a 0 más abajo, así que hay que sumar lo de esta temporada antes de
   // perderlo — si no, el leaderboard "de carrera" volvería a 0 cada temporada.
   const statsCarreraPrevias = (carrera.estadisticasCarrera as Record<string, number> | undefined)
-    ?? { partidosJugados: 0, goles: 0, asistencias: 0 }
+    ?? { partidosJugados: 0, goles: 0, asistencias: 0, tarjetasAmarillas: 0, tarjetasRojas: 0 }
   const newEstadisticasCarrera = {
     partidosJugados: statsCarreraPrevias.partidosJugados + (statsTemporada?.partidosJugados ?? 0),
     goles: statsCarreraPrevias.goles + (statsTemporada?.goles ?? 0),
     asistencias: statsCarreraPrevias.asistencias + (statsTemporada?.asistencias ?? 0),
+    tarjetasAmarillas: (statsCarreraPrevias.tarjetasAmarillas ?? 0) + (statsTemporada?.tarjetasAmarillas ?? 0),
+    tarjetasRojas: (statsCarreraPrevias.tarjetasRojas ?? 0) + (statsTemporada?.tarjetasRojas ?? 0),
   }
 
   const currentRol = (carrera.rol as Rol) ?? "Rotación"
@@ -272,7 +274,12 @@ export async function POST() {
       goles: 0,
       asistencias: 0,
       valoracionMedia: 6.0,
+      tarjetasAmarillas: 0,
+      tarjetasRojas: 0,
     },
+    // Las amarillas de una temporada no arrastran sanción a la siguiente —
+    // mismo criterio que en el fútbol real.
+    sancion: { partidosRestantes: 0 },
   }
 
   const newState = {

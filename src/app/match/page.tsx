@@ -285,13 +285,32 @@ function MatchPageInner() {
   const handleDiceComplete = useCallback(() => {
     if (!enginePlayer || !situacion || !selectedOpcion) return
     setDiceRolling(false)
-    const result = resolveDecisionWithDice(
+    const rawResult = resolveDecisionWithDice(
       selectedOpcion,
       enginePlayer,
       situacion,
       diceRoll,
       matchState.marcador,
     )
+
+    // Segunda amarilla del partido = roja automática (regla real del fútbol) —
+    // ver FASE D en context.md. resolveDecisionWithDice no conoce el historial
+    // del partido, así que la escalada se resuelve aquí, con matchState.
+    let tarjeta = rawResult.tarjeta
+    let tarjetasAmarillas = matchState.tarjetasAmarillas
+    let expulsado = matchState.expulsado
+    if (tarjeta === "amarilla") {
+      if (matchState.tarjetasAmarillas >= 1) {
+        tarjeta = "roja"
+        expulsado = true
+      } else {
+        tarjetasAmarillas += 1
+      }
+    } else if (tarjeta === "roja") {
+      expulsado = true
+    }
+    const result = { ...rawResult, tarjeta }
+
     setLastResult(result)
     setLastEncajado(result.marcador.visitante > matchState.marcador.visitante)
     setMatchState((prev) => ({
@@ -304,6 +323,8 @@ function MatchPageInner() {
       asistencias: prev.asistencias + (result.asistencia ? 1 : 0),
       tiros: prev.tiros + (situacion.esOportunidadGol ? 1 : 0),
       log: [...prev.log, result],
+      tarjetasAmarillas,
+      expulsado,
     }))
     setGeminiNarrative(null)
     setGeminiLoading(true)
@@ -350,12 +371,15 @@ function MatchPageInner() {
               asistencias: matchState.asistencias,
               valoracion: matchState.valoracion,
               marcador: `${matchState.marcador.local}-${matchState.marcador.visitante}`,
+              tarjetasAmarillas: matchState.tarjetasAmarillas,
+              tarjetasRojas: matchState.log.filter((r) => r.tarjeta === "roja").length,
             },
             updatedState: { fatiga: newFatiga },
             tipo,
             ganado,
             golesRival: matchState.marcador.visitante,
             esLocal,
+            expulsado: matchState.expulsado,
           }),
         })
       } catch {
@@ -536,6 +560,7 @@ function MatchPageInner() {
               gol={lastResult?.gol}
               peligroPropio={situacion?.peligroPropio}
               encajado={lastEncajado}
+              tarjeta={lastResult?.tarjeta}
             />
           </div>
         )}

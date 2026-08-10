@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
   const tipo: string = body.tipo ?? "liga"
   const ganado: boolean = body.ganado ?? false
   const golesRival: number = body.golesRival ?? 0
+  const expulsado: boolean = body.expulsado ?? false
 
   const found = await getPlayerByUserId(session.user.id)
   if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
@@ -61,11 +62,26 @@ export async function POST(req: NextRequest) {
     partidosJugados: statsTemporada.partidosJugados + 1,
     goles: statsTemporada.goles + (matchStats.goles ?? 0),
     asistencias: statsTemporada.asistencias + (matchStats.asistencias ?? 0),
+    tarjetasAmarillas: (statsTemporada.tarjetasAmarillas ?? 0) + (matchStats.tarjetasAmarillas ?? 0),
+    tarjetasRojas: (statsTemporada.tarjetasRojas ?? 0) + (matchStats.tarjetasRojas ?? 0),
     valoracionMedia:
       statsTemporada.partidosJugados > 0
         ? ((statsTemporada.valoracionMedia * statsTemporada.partidosJugados) + matchStats.valoracion) /
           (statsTemporada.partidosJugados + 1)
         : matchStats.valoracion,
+  }
+
+  // Roja directa/segunda amarilla o 5 amarillas acumuladas en la temporada
+  // (regla real de LaLiga) → sanción para el siguiente partido de liga. No se
+  // interrumpe el partido en curso (el motor de turnos no tiene corte
+  // anticipado) — ver FASE D en context.md. matchStats.tarjetasAmarillas es
+  // 0 o 1 por partido (una segunda amarilla en el mismo partido ya se
+  // convierte en roja antes de llegar aquí, ver match/page.tsx), así que el
+  // total de temporada sube como mucho de 1 en 1 y nunca se salta un múltiplo de 5.
+  const currentSancion = (carrera?.sancion as { partidosRestantes: number } | undefined) ?? { partidosRestantes: 0 }
+  const cincoAmarillas = (matchStats.tarjetasAmarillas ?? 0) > 0 && newStats.tarjetasAmarillas % 5 === 0
+  const newSancion = {
+    partidosRestantes: currentSancion.partidosRestantes + (expulsado || cincoAmarillas ? 1 : 0),
   }
 
   // XP and level
@@ -229,6 +245,7 @@ export async function POST(req: NextRequest) {
     fixtures,
     eventoActual,
     reputacion: newRep,
+    sancion: newSancion,
     ...(copa !== undefined ? { copa } : {}),
     ...(europa !== undefined ? { europa } : {}),
     ...(seleccion !== undefined ? { seleccion } : {}),

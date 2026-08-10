@@ -142,6 +142,27 @@ export function simularTablaFinal(division: Division, clubJugador: string, punto
   return tabla.sort((a, b) => b.puntos - a.puntos)
 }
 
+// Un partido de liga jugado por el equipo sin el jugador (sancionado por
+// roja/acumulación de amarillas, ver FASE D en context.md) — mismo modelo de
+// probabilidad 40% victoria / 30% empate / 30% derrota que ya usa
+// simularTablaFinal() para el resto de la liga, pero para un único partido
+// con marcador, no una tabla de puntos.
+export function simularPartidoSancion(): { resultado: "victoria" | "empate" | "derrota"; marcador: string } {
+  const r = Math.random()
+  if (r < 0.4) {
+    const misGoles = 1 + Math.floor(Math.random() * 3)
+    const rivalGoles = Math.max(0, misGoles - 1 - Math.floor(Math.random() * misGoles))
+    return { resultado: "victoria", marcador: `${misGoles}-${rivalGoles}` }
+  }
+  if (r < 0.7) {
+    const goles = Math.floor(Math.random() * 3)
+    return { resultado: "empate", marcador: `${goles}-${goles}` }
+  }
+  const rivalGoles = 1 + Math.floor(Math.random() * 3)
+  const misGoles = Math.max(0, rivalGoles - 1 - Math.floor(Math.random() * rivalGoles))
+  return { resultado: "derrota", marcador: `${misGoles}-${rivalGoles}` }
+}
+
 export function resolverAscensoDescenso(
   division: Division,
   posicion: number,

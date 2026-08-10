@@ -30,6 +30,10 @@ export interface TurnResult {
   asistencia: boolean
   valoracionDelta: number
   marcador: { local: number; visitante: number }
+  // Tarjeta sacada EN ESTE turno concreto (ver TARJETA_OPCIONES más abajo) —
+  // no incluye la escalada "segunda amarilla = roja", que se resuelve en el
+  // llamador porque necesita conocer el conteo acumulado del partido.
+  tarjeta?: "amarilla" | "roja"
 }
 
 export interface InteractiveMatchState {
@@ -43,7 +47,15 @@ export interface InteractiveMatchState {
   fatiga: number
   moral: number
   log: TurnResult[]
+  tarjetasAmarillas: number
+  expulsado: boolean
 }
+
+// Situaciones de entrada/falta cuyo texto narrativo ya insinuaba tarjetas
+// antes de que existiera ningún efecto mecánico — ver informe-fallos.md /
+// FASE D en context.md. El riesgo de cada opción (ya usado para
+// isCriticoFalloCondition) se reutiliza como probabilidad de tarjeta real.
+const TARJETA_OPCIONES = new Set(["entrada_fuerte", "falta_tactica", "entrada_limpia"])
 
 // Generic fallback narratives
 const NARRATIVOS: Record<ResultadoDecision, string[]> = {
@@ -1873,6 +1885,15 @@ export const resolveDecisionWithDice = (
     : NARRATIVOS[resultado]
   const narrativo = pool[Math.floor(Math.random() * pool.length)]
 
+  let tarjeta: "amarilla" | "roja" | undefined
+  if (TARJETA_OPCIONES.has(opcion.id)) {
+    if (resultado === ResultadoDecision.CRITICO_FALLO && Math.random() < opcion.riesgo) {
+      tarjeta = "roja"
+    } else if (resultado === ResultadoDecision.FALLO && Math.random() < opcion.riesgo) {
+      tarjeta = "amarilla"
+    }
+  }
+
   let gol = false
   let asistencia = false
   let valoracionDelta = 0
@@ -1930,7 +1951,7 @@ export const resolveDecisionWithDice = (
     }
   }
 
-  return { opcion, resultado, score, diceRoll, narrativo, gol, asistencia, valoracionDelta, marcador }
+  return { opcion, resultado, score, diceRoll, narrativo, gol, asistencia, valoracionDelta, marcador, tarjeta }
 }
 
 export const getStatLabel = (statKey: string): string => {
@@ -1955,4 +1976,6 @@ export const initMatchState = (): InteractiveMatchState => ({
   fatiga: 0,
   moral: 85,
   log: [],
+  tarjetasAmarillas: 0,
+  expulsado: false,
 })
