@@ -18,6 +18,7 @@ import {
   type Division,
   type SeleccionState,
   type ContratoState,
+  type SeasonHistoryEntry,
 } from "@/lib/world"
 
 type Fixture = {
@@ -252,6 +253,26 @@ export async function POST() {
       }
     : undefined
 
+  // Historial de temporadas: una entrada por temporada cerrada, construida con
+  // datos que esta función ya calcula (los mismos que van a "resumen" y a
+  // activityLog más abajo) — no se inventa nada nuevo. Ver SeasonHistoryEntry
+  // en world.ts.
+  const historialPrevio = (carrera.historialTemporadas as SeasonHistoryEntry[] | undefined) ?? []
+  const nuevaEntradaHistorial: SeasonHistoryEntry = {
+    temporada: newTemporada - 1,
+    club: currentClub,
+    division,
+    liga: (carrera.liga as string) ?? getDivisionInfo(division).nombre,
+    stats: statsTemporada as SeasonHistoryEntry["stats"],
+    premios,
+    rolAnterior: currentRol,
+    rolNuevo: newRol,
+    posicionFinal,
+    totalEquipos: tablaFinal.length,
+    cambioDivision,
+  }
+  const newHistorialTemporadas = [...historialPrevio, nuevaEntradaHistorial]
+
   const newCarrera = {
     ...carrera,
     rol: newRol,
@@ -267,6 +288,7 @@ export async function POST() {
     liga: finalLiga,
     divisionActual: finalDivision,
     estadisticasCarrera: newEstadisticasCarrera,
+    historialTemporadas: newHistorialTemporadas,
     ...(newSeleccion ? { seleccion: newSeleccion } : {}),
     ultimosPartidos: [],
     estadisticasTemporada: {

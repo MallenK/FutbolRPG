@@ -116,6 +116,31 @@ export function getDefaultClub(division: number): string {
 
 export type TablaEntry = { club: string; puntos: number; esJugador: boolean }
 
+// Una entrada por temporada cerrada, guardada en carrera.historialTemporadas
+// (ver FASE "Historial de temporadas" en context.md) — se construye en
+// api/season/end/route.ts a partir de datos que esa función ya calcula, no
+// se inventa nada nuevo.
+export type SeasonHistoryEntry = {
+  temporada: number
+  club: string
+  division: number
+  liga: string
+  stats: {
+    partidosJugados: number
+    goles: number
+    asistencias: number
+    valoracionMedia: number
+    tarjetasAmarillas?: number
+    tarjetasRojas?: number
+  }
+  premios: string[]
+  rolAnterior: string
+  rolNuevo: string
+  posicionFinal: number
+  totalEquipos: number
+  cambioDivision: "ascenso" | "descenso" | "ninguno"
+}
+
 export function calcularPuntosLiga(fixtures: { jugado: boolean; resultado: string | null }[]): number {
   let puntos = 0
   for (const f of fixtures) {

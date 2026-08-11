@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth-client"
 import VideoLoader from "@/components/VideoLoader"
 import { setReducedMotionOverride, getStoredReducedMotionOverride } from "@/lib/use-reduced-motion"
+import type { SeasonHistoryEntry } from "@/lib/world"
 
 type Preferencias = {
   reducirMovimiento?: boolean
@@ -33,6 +34,7 @@ type PlayerData = {
       club: string
       estadisticasTemporada?: { partidosJugados: number; goles: number; asistencias: number }
       estadisticasCarrera?: { partidosJugados: number; goles: number; asistencias: number }
+      historialTemporadas?: SeasonHistoryEntry[]
     }
   }
 }
@@ -245,6 +247,7 @@ export default function SettingsPage() {
   const totalPartidos = (statsCarrera?.partidosJugados ?? 0) + (statsTemporada?.partidosJugados ?? 0)
   const totalGoles = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
   const totalAsistencias = (statsCarrera?.asistencias ?? 0) + (statsTemporada?.asistencias ?? 0)
+  const historialTemporadas = player?.state.carrera.historialTemporadas ?? []
 
   return (
     <main className="min-h-screen bg-gray-950 text-white pb-24">
@@ -419,6 +422,35 @@ export default function SettingsPage() {
                   <div className="text-gray-500 text-xs">Asistencias</div>
                 </div>
               </div>
+
+              {historialTemporadas.length > 0 && (
+                <div className="pt-4 border-t border-gray-800 mb-4">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Historial de temporadas</p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {[...historialTemporadas].reverse().map((h) => (
+                      <div key={h.temporada} className="bg-gray-800/60 rounded-lg px-3 py-2.5 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-white">Temporada {h.temporada}</span>
+                          {h.cambioDivision !== "ninguno" && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              h.cambioDivision === "ascenso" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                            }`}>
+                              {h.cambioDivision === "ascenso" ? "▲ Ascenso" : "▼ Descenso"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          {h.club} · {h.liga} · {h.posicionFinal}º de {h.totalEquipos}
+                        </div>
+                        <div className="text-gray-400 text-xs mt-1">
+                          {h.stats.goles}G · {h.stats.asistencias}A · {h.stats.valoracionMedia.toFixed(1)} val.
+                          {h.premios.length > 0 && ` · ${h.premios.length} premio${h.premios.length > 1 ? "s" : ""}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button onClick={handleExport} className={secondaryBtn}>
                 Exportar mis datos (JSON)

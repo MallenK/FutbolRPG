@@ -61,6 +61,7 @@ function buildInitialState(division: Division, rpg?: RpgFields) {
       estadisticasTemporada: { partidosJugados: 0, goles: 0, asistencias: 0, valoracionMedia: 6.0, tarjetasAmarillas: 0, tarjetasRojas: 0 },
       estadisticasCarrera: { partidosJugados: 0, goles: 0, asistencias: 0, tarjetasAmarillas: 0, tarjetasRojas: 0 },
       sancion: { partidosRestantes: 0 },
+      historialTemporadas: [],
       ultimosPartidos: [],
       historial: {
         historialPartidos: [], resumenesTemporadas: [],
