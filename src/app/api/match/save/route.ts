@@ -84,11 +84,14 @@ export async function POST(req: NextRequest) {
     partidosRestantes: currentSancion.partidosRestantes + (expulsado || cincoAmarillas ? 1 : 0),
   }
 
-  // XP and level
+  const currentTraits = (currentState.traits as string[]) ?? []
+
+  // XP and level. "Alto Potencial": +20% XP ganado por partido.
   const currentXP = (currentState.xp as number) ?? 0
   const currentLevel = (currentState.level as number) ?? 1
   const currentAttrPoints = (currentState.attributePoints as number) ?? 0
-  const earned = calculateMatchXP(matchStats)
+  const baseEarned = calculateMatchXP(matchStats)
+  const earned = currentTraits.includes("alto_potencial") ? Math.round(baseEarned * 1.2) : baseEarned
   let newXP = currentXP + earned
   let newLevel = currentLevel
   let newAttrPoints = currentAttrPoints
@@ -116,7 +119,6 @@ export async function POST(req: NextRequest) {
   const updatedCarrera = ((updatedState as Record<string, unknown>)?.carrera as Record<string, unknown>) ?? {}
 
   // "Líder del Vestuario": +8 moral after every win
-  const currentTraits = (currentState.traits as string[]) ?? []
   const currentMoral = (currentState.moral as number) ?? 85
   const moralBonus = ganado && currentTraits.includes("lider_vestuario") ? 8 : 0
   const newMoral = Math.max(0, Math.min(100, currentMoral + moralBonus))

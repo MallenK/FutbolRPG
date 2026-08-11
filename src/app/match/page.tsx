@@ -352,7 +352,9 @@ function MatchPageInner() {
 
     if (isLastTurn) {
       setPhase("saving")
-      const newFatiga = Math.min(100, enginePlayer.estado.fatiga + 20)
+      // "Físico Excepcional": fatiga acumula un 25% más lento (ver player-config.ts).
+      const fatigaGanada = enginePlayer.traits.includes("fisico_excepcional") ? 20 * 0.75 : 20
+      const newFatiga = Math.min(100, enginePlayer.estado.fatiga + fatigaGanada)
       const tipo = matchContext?.tipo ?? "liga"
       const esLocal = matchContext?.esLocal ?? true
       // marcador.local/visitante son siempre "mis goles"/"goles del rival" (así los
