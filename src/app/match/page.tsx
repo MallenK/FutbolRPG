@@ -78,6 +78,7 @@ function mapDbPlayer(dbPlayer: DbPlayer): Player {
     traits?: string[]; potencial?: number
     piernaDominante?: string; altura?: number; peso?: number
     apodo?: string; dorsal?: number
+    posicionesSecundarias?: string[]
   }
 
   const fillStats = (group: Record<string, number>, defaults: Record<string, number>): Record<string, number> => {
@@ -105,7 +106,7 @@ function mapDbPlayer(dbPlayer: DbPlayer): Player {
       representante: "",
     },
     posicionPrincipal: dbPlayer.position as Posicion,
-    posicionesSecundarias: [],
+    posicionesSecundarias: (state.posicionesSecundarias as Posicion[] | undefined) ?? [],
     origen: state.origen ?? "academia",
     personalidad: state.personalidad ?? "profesional",
     estiloJuego: state.estiloJuego ?? "",
@@ -249,6 +250,11 @@ function MatchPageInner() {
   const [saveError, setSaveError] = useState("")
   const [geminiNarrative, setGeminiNarrative] = useState<string | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
+  // Rasgo "Polivalente": si el usuario activó "jugar como secundaria" en /season
+  // (?posicion=secundaria), este partido se resuelve con la posición secundaria
+  // como posición efectiva — undefined = comportamiento normal, jugar como
+  // posicionPrincipal. Ver context.md, sección de rasgos.
+  const [posicionEfectiva, setPosicionEfectiva] = useState<Posicion | undefined>(undefined)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -267,7 +273,10 @@ function MatchPageInner() {
         setMatchContext(ctx)
         const state = initMatchState()
         setMatchState(state)
-        setSituacion(getSituacionForTurn(1, mapped))
+        const jugarSecundaria = searchParams.get("posicion") === "secundaria"
+        const efectiva = jugarSecundaria ? mapped.posicionesSecundarias[0] : undefined
+        setPosicionEfectiva(efectiva)
+        setSituacion(getSituacionForTurn(1, mapped, efectiva))
         setPhase("situation")
       })
       .catch(() => setPhase("error"))
@@ -291,6 +300,7 @@ function MatchPageInner() {
       situacion,
       diceRoll,
       matchState.marcador,
+      posicionEfectiva,
     )
 
     // Segunda amarilla del partido = roja automática (regla real del fútbol) —
@@ -393,7 +403,7 @@ function MatchPageInner() {
 
     const nextTurn = matchState.turno + 1
     setMatchState((prev) => ({ ...prev, turno: nextTurn }))
-    setSituacion(getSituacionForTurn(nextTurn, enginePlayer))
+    setSituacion(getSituacionForTurn(nextTurn, enginePlayer, posicionEfectiva))
     setSelectedOpcion(null)
     setLastResult(null)
     setGeminiNarrative(null)
@@ -514,7 +524,8 @@ function MatchPageInner() {
           <div>
             <p className="text-xs text-gray-500">
               {enginePlayer?.personal.apodo ? `"${enginePlayer.personal.apodo}"` : enginePlayer?.personal.nombre} ·{" "}
-              {POSICION_LABELS[enginePlayer?.posicionPrincipal ?? Posicion.DELANTERO]}
+              {POSICION_LABELS[posicionEfectiva ?? enginePlayer?.posicionPrincipal ?? Posicion.DELANTERO]}
+              {posicionEfectiva && <span className="text-orange-400"> (fuera de posición)</span>}
             </p>
             <p className="text-xs text-gray-600">
               {matchContext?.club ?? "—"} · {matchContext?.competicion}

@@ -101,6 +101,9 @@ export default function CreatePlayerPage() {
   // Step 3: Position + style
   const [position, setPosition] = useState<Position>("ST")
   const [playStyle, setPlayStyle] = useState<string>("")
+  // Posición secundaria (rasgo "Polivalente"): solo entre posiciones de campo,
+  // GK no tiene — ver context.md, sección de rasgos.
+  const [secondaryPosition, setSecondaryPosition] = useState<Position | null>(null)
 
   // Step 4: Personality
   const [personality, setPersonality] = useState<PersonalityId>("profesional")
@@ -207,6 +210,7 @@ export default function CreatePlayerPage() {
             traits: [origin.traitId, selectedTrait],
             potencial: origin.potencial,
             clubElegido,
+            posicionesSecundarias: secondaryPosition ? [secondaryPosition] : [],
           },
         }),
       })
@@ -407,7 +411,10 @@ export default function CreatePlayerPage() {
               <label className="block text-xs text-gray-400 mb-3 uppercase tracking-wider">Posición</label>
               <div className="grid grid-cols-4 gap-2">
                 {POSITIONS.map((pos) => (
-                  <button key={pos.id} onClick={() => setPosition(pos.id)}
+                  <button key={pos.id} onClick={() => {
+                    setPosition(pos.id)
+                    if (pos.id === "GK" || secondaryPosition === pos.id) setSecondaryPosition(null)
+                  }}
                     className={`py-3 px-2 rounded-xl font-bold text-xs transition-colors ${position === pos.id ? "bg-green-500 text-black" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
                   >
                     <div className="text-base font-black">{pos.id}</div>
@@ -430,6 +437,30 @@ export default function CreatePlayerPage() {
                 ))}
               </div>
             </div>
+
+            {position !== "GK" && (
+              <div>
+                <label className="block text-xs text-gray-400 mb-3 uppercase tracking-wider">Posición secundaria (opcional)</label>
+                <div className="grid grid-cols-4 gap-2">
+                  <button onClick={() => setSecondaryPosition(null)}
+                    className={`py-3 px-2 rounded-xl font-bold text-xs transition-colors ${secondaryPosition === null ? "bg-green-500 text-black" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
+                  >
+                    <div className="mt-2.5 font-normal">Ninguna</div>
+                  </button>
+                  {POSITIONS.filter((pos) => pos.id !== "GK" && pos.id !== position).map((pos) => (
+                    <button key={pos.id} onClick={() => setSecondaryPosition(pos.id)}
+                      className={`py-3 px-2 rounded-xl font-bold text-xs transition-colors ${secondaryPosition === pos.id ? "bg-green-500 text-black" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}
+                    >
+                      <div className="text-base font-black">{pos.id}</div>
+                      <div className="mt-0.5 font-normal">{pos.label}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-gray-600 text-xs mt-2">
+                  Con el rasgo &quot;Polivalente&quot; puedes jugar en ella sin penalización.
+                </p>
+              </div>
+            )}
 
             <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
           </div>
@@ -592,7 +623,11 @@ export default function CreatePlayerPage() {
                       <span className="text-gray-500 text-base font-mono ml-2">#{dorsal}</span>
                     </p>
                     {apodo.trim() && <p className="text-gray-400 text-sm">{nombre} {apellido}</p>}
-                    <p className="text-gray-400 text-sm">{POSITIONS.find((p) => p.id === position)?.label} · {NATIONALITY_FLAGS[nationality]} {nationality} · {age} años</p>
+                    <p className="text-gray-400 text-sm">
+                      {POSITIONS.find((p) => p.id === position)?.label}
+                      {secondaryPosition && ` (+ ${POSITIONS.find((p) => p.id === secondaryPosition)?.label} secundaria)`}
+                      {" · "}{NATIONALITY_FLAGS[nationality]} {nationality} · {age} años
+                    </p>
                     <p className="text-gray-500 text-xs mt-0.5">{altura} cm · {peso} kg · Pie {foot}</p>
                   </div>
                 </div>

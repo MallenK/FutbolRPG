@@ -1788,12 +1788,17 @@ const getTargetDifficulty = (turno: number): number => {
   return 65 + Math.random() * 10
 }
 
-export const getSituacionForTurn = (turno: number, player: Player): Situacion => {
+export const getSituacionForTurn = (turno: number, player: Player, posicionEfectiva?: Posicion): Situacion => {
   let baseDC = getTargetDifficulty(turno)
   if (player.estado.fatiga > 50) baseDC += 5
   baseDC = Math.round(Math.max(30, Math.min(80, baseDC)))
 
-  const esPortero = player.posicionPrincipal === Posicion.PORTERO
+  // Rasgo "Polivalente" (ver context.md): posicionEfectiva es la posición
+  // secundaria cuando el jugador elige jugar fuera de posición. En la
+  // práctica nunca cambia de rama aquí porque GK nunca tiene secundaria ni es
+  // elegible como secundaria — existe por coherencia de firma con
+  // resolveDecisionWithDice, no porque el pool de campo varíe por posición.
+  const esPortero = (posicionEfectiva ?? player.posicionPrincipal) === Posicion.PORTERO
   let pool: Situacion[]
   if (esPortero) {
     // El portero nunca ataca — solo defiende su propia portería.
@@ -1844,9 +1849,17 @@ export const resolveDecisionWithDice = (
   player: Player,
   situacion: Situacion,
   diceRoll: number,
-  currentMarcador: { local: number; visitante: number }
+  currentMarcador: { local: number; visitante: number },
+  posicionEfectiva?: Posicion
 ): TurnResult => {
   const context = situacion.contexto
+  // Rasgo "Polivalente": sin él, jugar en la posición secundaria en vez de la
+  // principal resta al score — es la única penalización de posición que
+  // existe hoy en el motor (las 6 posiciones de campo comparten pool y
+  // fórmula, así que hasta ahora no había nada que "sin penalización"
+  // pudiera cancelar). Con el rasgo, la penalización es 0. Ver context.md.
+  const fueraDePosicion = posicionEfectiva !== undefined && posicionEfectiva !== player.posicionPrincipal
+  const penalizacionPosicion = fueraDePosicion && !(player.traits ?? []).includes("polivalente") ? -10 : 0
   const velocistaBonus = (player.traits ?? []).includes("velocista")
     && (opcion.statPrincipal === "velocidad" || opcion.statPrincipal === "aceleracion")
     ? 5 : 0
@@ -1865,7 +1878,7 @@ export const resolveDecisionWithDice = (
 
   const rawScore =
     50 + skillDifference + formMod - fatigueMod + confidenceMod - effectivePressure +
-    context.bonusContexto + randomFactor
+    context.bonusContexto + randomFactor + penalizacionPosicion
 
   const score = Math.max(0, Math.min(100, Math.round(rawScore)))
 

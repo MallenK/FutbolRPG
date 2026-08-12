@@ -7,6 +7,7 @@ import { useSession } from "@/lib/auth-client"
 import { type CareerEvent, type OpcionEvento } from "@/engine/career-events"
 import { getEventNarrative, getSeasonNarrative } from "@/lib/narrative"
 import VideoLoader from "@/components/VideoLoader"
+import { POSITION_LABELS } from "@/lib/player-config"
 
 const TrophyScene = dynamic(() => import("@/components/TrophyScene"), {
   ssr: false,
@@ -32,6 +33,7 @@ type Fixture = {
 type PlayerState = {
   name: string
   position: string
+  posicionesSecundarias?: string[]
   age: number
   flatStats: Record<string, number>
   carrera: {
@@ -106,6 +108,7 @@ export default function SeasonPage() {
   const [seasonNarrative, setSeasonNarrative] = useState<string | null>(null)
   const [seasonNarrativeLoading, setSeasonNarrativeLoading] = useState(false)
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
+  const [jugarComoSecundaria, setJugarComoSecundaria] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -132,6 +135,7 @@ export default function SeasonPage() {
     const ps: PlayerState = {
       name: player.name,
       position: player.position ?? "CM",
+      posicionesSecundarias: (player.state?.posicionesSecundarias as string[] | undefined) ?? [],
       age: player.age,
       flatStats: (player.state?.attributes as Record<string, number>) ?? {},
       carrera: {
@@ -655,12 +659,27 @@ export default function SeasonPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => router.push("/match")}
-                      className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
-                    >
-                      Jugar partido →
-                    </button>
+                    <div className="space-y-3">
+                      {(playerState?.posicionesSecundarias?.length ?? 0) > 0 && (
+                        <label className="flex items-center gap-3 bg-gray-800/60 border border-gray-700 rounded-xl px-4 py-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={jugarComoSecundaria}
+                            onChange={(e) => setJugarComoSecundaria(e.target.checked)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-gray-300 text-sm">
+                            Jugar como {POSITION_LABELS[playerState!.posicionesSecundarias![0] as keyof typeof POSITION_LABELS]} (posición secundaria)
+                          </span>
+                        </label>
+                      )}
+                      <button
+                        onClick={() => router.push(jugarComoSecundaria ? "/match?posicion=secundaria" : "/match")}
+                        className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
+                      >
+                        Jugar partido →
+                      </button>
+                    </div>
                   )}
                 </div>
               )

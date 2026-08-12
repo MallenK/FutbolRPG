@@ -21,6 +21,7 @@ type RpgFields = {
   traits?: string[]
   potencial?: number
   clubElegido?: string
+  posicionesSecundarias?: string[]
 }
 
 function buildInitialState(division: Division, rpg?: RpgFields) {
@@ -43,6 +44,7 @@ function buildInitialState(division: Division, rpg?: RpgFields) {
     piernaDominante: rpg?.piernaDominante ?? "derecho",
     altura: rpg?.altura ?? 180,
     peso: rpg?.peso ?? 75,
+    posicionesSecundarias: rpg?.posicionesSecundarias ?? [],
     xp: 0,
     level: 1,
     attributePoints: 0,
