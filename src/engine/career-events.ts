@@ -2369,30 +2369,40 @@ export const CAREER_EVENTS: CareerEvent[] = [
 
 // ─── Pick random event ────────────────────────────────────────────────────────
 
+// Elegibilidad "dura" (jornada/división/posición/rol/reputación/stats): a
+// diferencia de excludeIds (que es solo anti-repetición), esto nunca debe
+// relajarse en el fallback -- un evento de portero no debe poder acabar
+// jamás en la pantalla de un delantero solo porque ya se agotó el pool.
+const isEligible = (e: CareerEvent, jornada: number, division: number, ctx: PlayerContext): boolean => {
+  if (e.esArco) return false
+  if (e.minJornada && e.minJornada > jornada) return false
+  if (e.minDivision && e.minDivision > division) return false
+  if (e.maxDivision && e.maxDivision < division) return false
+  if (e.posiciones?.length && ctx.position && !e.posiciones.includes(ctx.position)) return false
+  if (e.roles?.length && ctx.role && !e.roles.includes(ctx.role)) return false
+  if (e.minReputacion && (ctx.reputacion ?? 0) < e.minReputacion) return false
+  if (e.requiereStats) {
+    for (const [stat, min] of Object.entries(e.requiereStats)) {
+      if ((ctx.stats?.[stat] ?? 0) < min) return false
+    }
+  }
+  return true
+}
+
 export const pickRandomEvent = (
   jornada: number,
   division: number = 3,
   excludeIds: string[] = [],
   ctx: PlayerContext = {},
 ): CareerEvent => {
-  const available = CAREER_EVENTS.filter((e) => {
-    if (e.esArco) return false
-    if (e.minJornada && e.minJornada > jornada) return false
-    if (e.minDivision && e.minDivision > division) return false
-    if (e.maxDivision && e.maxDivision < division) return false
-    if (excludeIds.includes(e.id)) return false
-    if (e.posiciones?.length && ctx.position && !e.posiciones.includes(ctx.position)) return false
-    if (e.roles?.length && ctx.role && !e.roles.includes(ctx.role)) return false
-    if (e.minReputacion && (ctx.reputacion ?? 0) < e.minReputacion) return false
-    if (e.requiereStats) {
-      for (const [stat, min] of Object.entries(e.requiereStats)) {
-        if ((ctx.stats?.[stat] ?? 0) < min) return false
-      }
-    }
-    return true
-  })
+  const eligible = CAREER_EVENTS.filter((e) => isEligible(e, jornada, division, ctx))
+  const available = eligible.filter((e) => !excludeIds.includes(e.id))
 
-  const pool = available.length > 0 ? available : CAREER_EVENTS.filter((e) => !e.esArco)
+  // Si excludeIds agota el pool elegible, se releja solo la anti-repetición
+  // (puede repetirse un evento ya visto) -- nunca la elegibilidad real. Solo
+  // si ni siquiera hay eventos elegibles (combinación de contexto imposible)
+  // se cae al pool genérico como red de seguridad.
+  const pool = available.length > 0 ? available : eligible.length > 0 ? eligible : CAREER_EVENTS.filter((e) => !e.esArco)
   return pool[Math.floor(Math.random() * pool.length)]
 }
 
