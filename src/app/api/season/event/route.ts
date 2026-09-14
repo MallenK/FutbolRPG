@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { type CareerEvent, type OpcionEvento, getEventById, pickAutoOpcion } from "@/engine/career-events"
 import { getDivisionInfo } from "@/lib/world"
+import { retirarJugador } from "@/lib/legado"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
@@ -29,6 +30,15 @@ export async function POST(req: NextRequest) {
       })())
     : evento.opciones.find((o: OpcionEvento) => o.id === opcionId)
   if (!opcion) return NextResponse.json({ error: "Invalid option" }, { status: 400 })
+
+  // Retiro definitivo: en vez de aplicar los efectos normales, se archiva la
+  // carrera entera en el Legado y se borra el jugador. No tiene sentido
+  // seguir actualizando state después de esto (la fila va a desaparecer).
+  if (evento.id === "retiro_forzado" && opcion.id === "retirarse") {
+    const result = await retirarJugador(session.user.id)
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 404 })
+    return NextResponse.json({ success: true, narrativo: opcion.narrativo, retirado: true })
+  }
 
   const fx = opcion.efectos
 

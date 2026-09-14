@@ -149,3 +149,28 @@ export const activityLog = pgTable("activity_log", {
   data: jsonb("data").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
+
+// Vitrina permanente de carreras retiradas ("Legado"/Hall of Fame). Vive en
+// su propia tabla (no en player.state) porque un usuario puede acumular
+// varias a lo largo del tiempo y deben sobrevivir a que `player` se borre
+// para empezar una carrera nueva (ver api/legado/retirar).
+export const legado = pgTable("legado", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  playerName: text("player_name").notNull(),
+  apodo: text("apodo"),
+  position: text("position").notNull(),
+  nationality: text("nationality").notNull(),
+  edadRetiro: integer("edad_retiro").notNull(),
+  temporadas: integer("temporadas").notNull(),
+  clubFinal: text("club_final").notNull(),
+  divisionFinal: integer("division_final").notNull(),
+  nivelFinal: integer("nivel_final").notNull(),
+  reputacionFinal: integer("reputacion_final").notNull(),
+  estadisticas: jsonb("estadisticas").notNull(), // { partidosJugados, goles, asistencias }
+  premios: jsonb("premios").notNull(), // string[] -- todos los trofeos ganados en la carrera
+  historialTemporadas: jsonb("historial_temporadas").notNull(), // SeasonHistoryEntry[] completo
+  retiradoEn: timestamp("retirado_en").notNull().defaultNow(),
+})

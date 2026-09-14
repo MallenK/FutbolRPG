@@ -101,6 +101,8 @@ export default function SettingsPage() {
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [retiroConfirmed, setRetiroConfirmed] = useState(false)
+  const [retiroLoading, setRetiroLoading] = useState(false)
 
   const [apodo, setApodo] = useState("")
   const [dorsal, setDorsal] = useState(10)
@@ -201,6 +203,16 @@ export default function SettingsPage() {
     // la carrera sin más lógica y de paso limpia cualquier estado de cliente
     // que quedara de la cuenta ya eliminada.
     window.location.href = "/"
+  }
+
+  async function handleRetirar() {
+    setRetiroLoading(true)
+    const res = await fetch("/api/legado/retirar", { method: "POST" })
+    if (res.ok) {
+      router.push("/legado")
+      return
+    }
+    setRetiroLoading(false)
   }
 
   async function saveProfile(e: React.FormEvent) {
@@ -476,6 +488,30 @@ export default function SettingsPage() {
               <button onClick={handleExport} className={secondaryBtn}>
                 Exportar mis datos (JSON)
               </button>
+
+              <div className="border-t border-gray-800 pt-4 mt-4">
+                <h3 className="text-orange-400 font-bold text-sm mb-2">Retirarse</h3>
+                <p className="text-gray-500 text-xs mb-3">
+                  Cierra esta carrera para siempre y pasa a tu <a href="/legado" className="underline hover:text-gray-300">Legado</a>.
+                  Después podrás crear un jugador nuevo. Tus estadísticas y premios quedan guardados, pero la carrera actual no se puede recuperar.
+                </p>
+                <label className="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={retiroConfirmed}
+                    onChange={(e) => setRetiroConfirmed(e.target.checked)}
+                    className="w-4 h-4 accent-orange-500"
+                  />
+                  Entiendo que esta carrera terminará
+                </label>
+                <button
+                  onClick={handleRetirar}
+                  disabled={!retiroConfirmed || retiroLoading}
+                  className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white font-bold text-sm rounded-lg transition-colors"
+                >
+                  {retiroLoading ? "Retirando..." : "Retirarme y empezar de nuevo"}
+                </button>
+              </div>
             </section>
 
             {/* Modo de juego */}

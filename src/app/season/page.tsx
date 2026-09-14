@@ -129,6 +129,7 @@ export default function SeasonPage() {
   const [simulatingMatch, setSimulatingMatch] = useState(false)
   const [autoSeasonRunning, setAutoSeasonRunning] = useState(false)
   const [autoSeasonStep, setAutoSeasonStep] = useState(0)
+  const [retirado, setRetirado] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -284,9 +285,17 @@ export default function SeasonPage() {
     const data = await res.json()
     setEventNarrativo(data.narrativo)
     setGeminiEventNarrative(null)
+    setResolving(false)
+
+    // Retiro definitivo: el jugador ya no existe (ver api/season/event),
+    // así que no recargamos playerState -- solo dejamos ver el mensaje de
+    // despedida; "Continuar" (handleContinueAfterEvent) lleva a /legado.
+    if (data.retirado) {
+      setRetirado(true)
+      return
+    }
 
     await loadPlayer()
-    setResolving(false)
 
     if (evento && opcionElegida && playerState) {
       setGeminiEventLoading(true)
@@ -307,6 +316,10 @@ export default function SeasonPage() {
   }
 
   const handleContinueAfterEvent = () => {
+    if (retirado) {
+      router.push("/legado")
+      return
+    }
     setEventNarrativo(null)
     setGeminiEventNarrative(null)
     setGeminiEventLoading(false)

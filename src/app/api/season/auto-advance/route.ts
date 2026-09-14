@@ -32,7 +32,12 @@ export async function POST() {
   if (evento) {
     const attrs = found.attributes as Record<string, Record<string, number>>
     const flat = { ...attrs?.tecnicos, ...attrs?.fisicos, ...attrs?.tacticos, ...attrs?.mentales }
-    const opcion = pickAutoOpcion(evento, flat)
+    // El evento de retiro nunca se decide al azar en modo "simulado" -- sería
+    // muy raro que el jugador desaparezca a media simulación sin haberlo
+    // pedido. Retirarse sigue siendo posible, pero solo a mano (Ajustes).
+    const opcion = evento.id === "retiro_forzado"
+      ? evento.opciones.find((o) => o.id === "una_mas") ?? evento.opciones[0]
+      : pickAutoOpcion(evento, flat)
     const fx = opcion.efectos
 
     // Reutiliza el mismo cálculo que /api/season/event, simplificado: solo
