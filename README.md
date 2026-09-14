@@ -28,7 +28,7 @@ remotion/           composiciones de Remotion (loaders)
 
 1. Instalar dependencias:
    `pnpm install`
-2. Configurar variables en `.env.local` (ver `.env.local.example` o pedir al equipo): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_BETTER_AUTH_URL`, `GEMINI_API_KEY`.
+2. Configurar variables en `.env.local` (ver `.env.local.example` o pedir al equipo): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_BETTER_AUTH_URL`, `GEMINI_API_KEY`, `RESEND_API_KEY` (emails), `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (login con Google), `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (pagos). Todas opcionales salvo las 4 primeras — sin ellas esas features concretas se desactivan solas sin romper el resto.
 3. Aplicar el schema a la base de datos:
    `pnpm db:push`
 4. Arrancar el entorno de desarrollo:

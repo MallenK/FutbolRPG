@@ -1,6 +1,6 @@
 "use client"
 
-import { useSession, signOut } from "@/lib/auth-client"
+import { useSession, signOut, sendVerificationEmail } from "@/lib/auth-client"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import StatBar from "@/components/StatBar"
@@ -118,6 +118,13 @@ export default function DashboardPage() {
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [pendingOffers, setPendingOffers] = useState(0)
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
+  const [verificationSent, setVerificationSent] = useState(false)
+
+  const handleResendVerification = async () => {
+    if (!session?.user.email) return
+    await sendVerificationEmail({ email: session.user.email, callbackURL: "/dashboard" })
+    setVerificationSent(true)
+  }
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -242,6 +249,21 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+
+        {!session.user.emailVerified && (
+          <div className="mb-4 flex items-center justify-between gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3">
+            <p className="text-blue-300 text-xs">
+              📧 Confirma tu email para proteger tu cuenta del todo.
+            </p>
+            <button
+              onClick={handleResendVerification}
+              disabled={verificationSent}
+              className="shrink-0 text-xs font-bold text-blue-400 hover:text-blue-300 disabled:text-gray-500 transition-colors"
+            >
+              {verificationSent ? "Enviado ✓" : "Reenviar email"}
+            </button>
+          </div>
+        )}
 
         {!player ? (
           <div className="bg-gray-900 rounded-2xl border border-gray-800 p-10 text-center">

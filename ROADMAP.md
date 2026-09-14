@@ -111,6 +111,16 @@ award                → galardones (Balón de Oro, MVP, Bota de Oro...)
 - [ ] **Pendiente antes de cobrar de verdad**: crear cuenta Stripe (o activarla si ya existe), configurar `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` en Vercel, probar el flujo completo en modo test, y solo entonces pasar a claves live.
 - [ ] Paywall visual en `/mercado` (hoy el 402 de `market/toggle`/`market/offer` no se muestra en la UI, solo en `/season`).
 
+## Autenticación profesional
+
+- [x] Verificación de email al registrarse (`emailVerification.sendOnSignUp`), no bloqueante para no dejar fuera a cuentas existentes.
+- [x] Recuperación de contraseña completa: `/forgot-password` → email con enlace → `/reset-password`.
+- [x] Login/registro con Google (activado solo si `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` están configuradas).
+- [x] Emails transaccionales vía Resend (`src/lib/email.ts`): verificación y reset de contraseña, con plantilla HTML de marca. Sin `RESEND_API_KEY`, se loguea en consola en vez de romper el flujo.
+- [x] Banner de "confirma tu email" en dashboard con reenvío.
+- [ ] **Pendiente antes de que Google funcione de verdad**: crear credenciales OAuth en Google Cloud Console y configurarlas en Vercel.
+- [ ] **Pendiente antes de que los emails salgan de verdad**: cuenta Resend + `RESEND_API_KEY` en Vercel (y opcionalmente verificar un dominio propio para no usar `onboarding@resend.dev`).
+
 ## Próximos pasos (por prioridad sugerida)
 
 1. **Sistema de galardones** — cierre natural de cada temporada, reutiliza `seasonHistory` y `activityLog` ya existentes. Bajo esfuerzo, alto impacto narrativo.
