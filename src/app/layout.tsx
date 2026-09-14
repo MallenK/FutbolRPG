@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import BottomNav from "@/components/BottomNav"
 
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="pb-safe">
         {children}
         <BottomNav />
+        <Analytics />
       </body>
     </html>
   )
