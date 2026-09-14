@@ -12,6 +12,7 @@ type Category = "level" | "reputation" | "seasons"
 
 type LeaderboardEntry = {
   rank: number
+  playerId: string
   playerName: string
   userName: string
   position: string
@@ -93,9 +94,10 @@ export default function LeaderboardPage() {
           ) : (
             <div className="divide-y divide-gray-800">
               {entries.map((e) => (
-                <div
+                <button
                   key={e.rank}
-                  className={`flex items-center gap-4 px-5 py-4 ${
+                  onClick={() => router.push(`/comparar/${e.playerId}`)}
+                  className={`w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-gray-800/70 transition-colors ${
                     e.rank <= 3 ? "bg-gray-800/50" : ""
                   }`}
                 >
@@ -132,7 +134,7 @@ export default function LeaderboardPage() {
                       <p className="text-gray-600 text-xs">temp</p>
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

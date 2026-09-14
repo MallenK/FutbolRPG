@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 
 type LeaderboardEntry = {
   rank: number
+  playerId: string
   playerName: string
   userName: string
   position: string
@@ -30,6 +31,7 @@ export async function GET(req: Request) {
 
   const rows = await db
     .select({
+      playerId: player.id,
       playerName: player.name,
       userName: user.name,
       position: player.position,
@@ -56,6 +58,7 @@ export async function GET(req: Request) {
       const golesCarrera = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
       return {
         rank: i + 1,
+        playerId: r.playerId,
         playerName: r.playerName,
         userName: r.userName,
         position: r.position,
