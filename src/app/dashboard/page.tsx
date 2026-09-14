@@ -41,6 +41,7 @@ type PlayerData = {
     peso?: number
     apodo?: string
     dorsal?: number
+    racha?: { diasConsecutivos: number; ultimoDia: string }
     preferencias?: { ocultarAvisoMercado?: boolean }
     carrera: {
       club: string
@@ -227,6 +228,14 @@ export default function DashboardPage() {
             Futbol<span className="text-green-400">RPG</span>
           </h1>
           <div className="flex items-center gap-3">
+            {player?.state.racha && player.state.racha.diasConsecutivos > 1 && (
+              <span
+                title="Días seguidos jugando"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-xs font-bold"
+              >
+                🔥 {player.state.racha.diasConsecutivos} días
+              </span>
+            )}
             {pendingMarketOffers > 0 && (
               <button
                 onClick={() => router.push("/mercado")}

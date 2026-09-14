@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
 import { getDivisionInfo, type Division } from "@/lib/world"
+import { updateRacha, type RachaState } from "@/lib/streak"
 
 type RpgFields = {
   apellido?: string
@@ -83,7 +84,24 @@ export async function GET() {
   if (error) return error
 
   const found = await getPlayerByUserId(session.user.id)
-  return NextResponse.json({ player: found })
+  if (!found) return NextResponse.json({ player: null })
+
+  // Racha diaria: solo se escribe en BD la primera vez que se abre la app en
+  // un día natural (UTC) — cargas repetidas el mismo día son gratis.
+  const state = found.state as Record<string, unknown>
+  const { racha, isNewDay } = updateRacha(state.racha as RachaState | undefined)
+  if (!isNewDay) return NextResponse.json({ player: found })
+
+  const newState = {
+    ...state,
+    racha,
+    moral: Math.min(100, ((state.moral as number) ?? 85) + 2),
+  }
+  await db.update(player)
+    .set({ state: newState, updatedAt: new Date() })
+    .where(eq(player.userId, session.user.id))
+
+  return NextResponse.json({ player: { ...found, state: newState } })
 }
 
 export async function POST(req: NextRequest) {
