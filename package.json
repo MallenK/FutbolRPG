@@ -20,6 +20,7 @@
     "@react-three/fiber": "^9.7.0",
     "@remotion/cli": "4.0.506",
     "@remotion/google-fonts": "4.0.506",
+    "@vercel/analytics": "^2.0.1",
     "better-auth": "^1.6.9",
     "drizzle-orm": "^0.45.2",
     "next": "^15.3.2",

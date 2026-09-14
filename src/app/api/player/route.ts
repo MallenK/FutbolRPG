@@ -58,6 +58,7 @@ function buildInitialState(division: Division, rpg?: RpgFields) {
       jornadaActual: 0,
       fixtures: [],
       eventoActual: null,
+      eventosPendientes: [],
       premios: [],
       etiquetas: ["Joven Promesa"],
       estadisticasTemporada: { partidosJugados: 0, goles: 0, asistencias: 0, valoracionMedia: 6.0, tarjetasAmarillas: 0, tarjetasRojas: 0 },

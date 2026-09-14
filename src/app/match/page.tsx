@@ -276,7 +276,7 @@ function MatchPageInner() {
         const jugarSecundaria = searchParams.get("posicion") === "secundaria"
         const efectiva = jugarSecundaria ? mapped.posicionesSecundarias[0] : undefined
         setPosicionEfectiva(efectiva)
-        setSituacion(getSituacionForTurn(1, mapped, efectiva))
+        setSituacion(getSituacionForTurn(1, mapped, efectiva, state.totalTurnos, []))
         setPhase("situation")
       })
       .catch(() => setPhase("error"))
@@ -402,8 +402,13 @@ function MatchPageInner() {
     }
 
     const nextTurn = matchState.turno + 1
-    setMatchState((prev) => ({ ...prev, turno: nextTurn }))
-    setSituacion(getSituacionForTurn(nextTurn, enginePlayer, posicionEfectiva))
+    // Se recuerdan las últimas 3 situaciones jugadas para que getSituacionForTurn
+    // no repita ninguna de ellas mientras el pool lo permita.
+    const nuevasRecientes = situacion
+      ? [...matchState.situacionesRecientes, situacion.id].slice(-3)
+      : matchState.situacionesRecientes
+    setMatchState((prev) => ({ ...prev, turno: nextTurn, situacionesRecientes: nuevasRecientes }))
+    setSituacion(getSituacionForTurn(nextTurn, enginePlayer, posicionEfectiva, matchState.totalTurnos, nuevasRecientes))
     setSelectedOpcion(null)
     setLastResult(null)
     setGeminiNarrative(null)

@@ -82,11 +82,22 @@ export async function POST(req: NextRequest) {
     ? (getEventById(opcion.seguimientoEventoId) ?? null)
     : null
 
+  // Sin evento de arco, el siguiente evento sale de la cola de eventos
+  // pendientes (ráfaga generada fuera de partido, ver match/save/route.ts)
+  // en vez de esperar al próximo partido — así varios eventos de carrera
+  // pueden encadenarse seguidos.
+  const pendientes = (carrera.eventosPendientes as CareerEvent[]) ?? []
+  const nextFromQueue = pendientes[0] ?? null
+  const remainingQueue = pendientes.slice(1)
+
+  const nextEvento = arcEvento ?? nextFromQueue
+
   const newCarrera = {
     ...carrera,
     ...newCarreraFields,
     reputacion: clamp(currentRep + (fx.reputacion ?? 0)),
-    eventoActual: arcEvento,
+    eventoActual: nextEvento,
+    eventosPendientes: arcEvento ? pendientes : remainingQueue,
     eventosResueltos: newResolvedIds,
   }
 

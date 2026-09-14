@@ -12,11 +12,18 @@ describe("initMatchState", () => {
   it("devuelve un estado inicial consistente", () => {
     const state = initMatchState()
     expect(state.turno).toBe(1)
-    expect(state.totalTurnos).toBe(5)
+    expect(state.totalTurnos).toBeGreaterThanOrEqual(2)
+    expect(state.totalTurnos).toBeLessThanOrEqual(6)
     expect(state.marcador).toEqual({ local: 0, visitante: 0 })
     expect(state.tarjetasAmarillas).toBe(0)
     expect(state.expulsado).toBe(false)
     expect(state.log).toEqual([])
+    expect(state.situacionesRecientes).toEqual([])
+  })
+
+  it("la duración del partido (totalTurnos) varía entre partidos, no es siempre la misma", () => {
+    const valores = new Set(Array.from({ length: 50 }, () => initMatchState().totalTurnos))
+    expect(valores.size).toBeGreaterThan(1)
   })
 })
 
@@ -70,10 +77,54 @@ describe("getSituacionForTurn", () => {
     }
   })
 
-  it("el minuto se calcula proporcionalmente al turno (turno/5 * 90)", () => {
+  it("el minuto se calcula proporcionalmente al turno (turno/5 * 90 por defecto)", () => {
     const player = createDefaultPlayer()
     const s3 = getSituacionForTurn(3, player)
     expect(s3.minuto).toBe(Math.round((3 / 5) * 90))
+  })
+
+  it("el minuto usa el totalTurnos real del partido cuando se pasa explícito", () => {
+    const player = createDefaultPlayer()
+    const s = getSituacionForTurn(2, player, undefined, 3)
+    expect(s.minuto).toBe(Math.round((2 / 3) * 90))
+  })
+
+  it("no repite ninguna de las situaciones recientes mientras el pool lo permita", () => {
+    const player = createDefaultPlayer()
+    player.posicionPrincipal = Posicion.DELANTERO
+    for (let i = 0; i < 100; i++) {
+      const previa = getSituacionForTurn(1, player, undefined, 5, [])
+      const siguiente = getSituacionForTurn(2, player, undefined, 5, [previa.id])
+      expect(siguiente.id).not.toBe(previa.id)
+    }
+  })
+
+  it("favorece las situaciones marcadas para la posición del jugador (peso, no filtro exclusivo)", () => {
+    const central = createDefaultPlayer()
+    central.posicionPrincipal = Posicion.DEFENSA_CENTRAL
+
+    const conteo: Record<string, number> = {}
+    for (let i = 0; i < 500; i++) {
+      const s = getSituacionForTurn(2, central, undefined, 5, [])
+      conteo[s.id] = (conteo[s.id] ?? 0) + 1
+    }
+    // "robo_entrada_mediocamp" está marcada para DEFENSA_CENTRAL/MEDIOCENTRO,
+    // "mano_a_mano" está marcada para DELANTERO/EXTREMO/MEDIAPUNTA.
+    expect(conteo["robo_entrada_mediocamp"] ?? 0).toBeGreaterThan(conteo["mano_a_mano"] ?? 0)
+  })
+
+  it("nunca deja el pool vacío para ninguna posición de campo, incluso con dificultad alta", () => {
+    for (const posicion of [
+      Posicion.DEFENSA_CENTRAL, Posicion.LATERAL, Posicion.MEDIOCENTRO,
+      Posicion.MEDIAPUNTA, Posicion.EXTREMO, Posicion.DELANTERO,
+    ]) {
+      const player = createDefaultPlayer()
+      player.posicionPrincipal = posicion
+      for (let i = 0; i < 100; i++) {
+        const s = getSituacionForTurn(5, player)
+        expect(s).toBeDefined()
+      }
+    }
   })
 })
 
