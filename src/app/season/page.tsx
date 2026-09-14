@@ -131,6 +131,7 @@ export default function SeasonPage() {
   const [autoSeasonRunning, setAutoSeasonRunning] = useState(false)
   const [autoSeasonStep, setAutoSeasonStep] = useState(0)
   const [retirado, setRetirado] = useState(false)
+  const [requestingTransfer, setRequestingTransfer] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -230,6 +231,21 @@ export default function SeasonPage() {
     await fetch("/api/season/resolve-sancion", { method: "POST" })
     await loadPlayer()
     setResolvingSancion(false)
+  }
+
+  const handleRequestTransfer = async () => {
+    if (requestingTransfer) return
+    setRequestingTransfer(true)
+    try {
+      await fetch("/api/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "requestTransfer" }),
+      })
+      await loadPlayer()
+    } finally {
+      setRequestingTransfer(false)
+    }
   }
 
   const handleSimularPartido = async () => {
@@ -699,6 +715,33 @@ export default function SeasonPage() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Contract / transfer request — vive dentro de la carrera, no en el navbar */}
+            {phase !== "no_season" && phase !== "season_summary" && (
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white">Situación contractual</p>
+                  <p className="text-gray-500 text-xs mt-0.5 truncate">
+                    {mercado?.enLista
+                      ? "En lista de transferibles — a la espera de ofertas de clubes"
+                      : `${carrera.club} · Rep. ${carrera.reputacion}/100`}
+                  </p>
+                </div>
+                {mercado?.enLista ? (
+                  <span className="shrink-0 text-xs font-bold px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">
+                    EN LISTA
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleRequestTransfer}
+                    disabled={requestingTransfer}
+                    className="shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black font-bold rounded-lg text-xs transition-colors"
+                  >
+                    {requestingTransfer ? "Tramitando..." : "Solicitar traspaso"}
+                  </button>
                 )}
               </div>
             )}
