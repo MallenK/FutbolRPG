@@ -34,7 +34,7 @@ Simulador completo de carrera futbolística estilo FIFA Career Mode combinado co
 
 ## Estado Actual (actualizado)
 
-El proyecto está muy por delante de lo que reflejaba este documento anteriormente. Fases 1 y 2 completas; Fase 3 y 4 parcialmente implementadas.
+El proyecto está muy por delante de lo que reflejaba este documento anteriormente. Fases 1, 2 y 4 completas; Fase 3 parcialmente implementada.
 
 ### Fase 1 — Fundación ✅ COMPLETA
 - [x] Next.js 15 + TypeScript
@@ -57,26 +57,25 @@ El proyecto está muy por delante de lo que reflejaba este documento anteriormen
 - [x] Banco de eventos narrativos con traits (rasgos dormidos, polivalencia, físico excepcional, etc.)
 - [x] Narrativa IA vía Gemini (`api/ai/narrative`) con loaders Remotion contextuales
 - [x] Sistema de sanciones (`season/resolve-sancion`)
-- [ ] **Selección nacional**: convocatorias, torneos internacionales (Eurocopa, Mundial) — no iniciado
+- [x] **Selección nacional**: convocatorias (parón internacional), Eurocopa y Mundial jugables (`world.ts`, tab "Selección" en `/season`) — bloqueada tras el límite del plan gratuito (ver Stripe/Premium)
 - [x] **Sistema de galardones**: Balón de Oro/MVP/Bota de Oro/campeonatos ya se calculaban cada temporada (`calcularPremios` en `api/season/end`) y se guardaban en `historialTemporadas`, pero nunca se mostraban — añadida vitrina de trofeos en `/dashboard` que lista todos los premios ganados por temporada. Pendiente: un "Balón de Oro" global cruzando jugadores de todos los usuarios (requiere lógica de comparación asíncrona entre carreras).
-- [ ] Ascensos y descensos entre ligas (pirámide de ligas por país) — no confirmado en el engine actual
+- [x] Ascensos y descensos por posición en la liga (`resolverAscensoDescenso` en `world.ts`, aplicado en `api/season/end`) — sigue siendo una única pirámide de 5 divisiones en España, no una pirámide por país (ver informe-fallos.md, hallazgo C6/nota de producto)
 - [ ] Sistema de reputación/popularidad (local → nacional → mundial) — no confirmado
 
-### Fase 4 — Multijugador Asíncrono 🟡 EN CURSO
+### Fase 4 — Multijugador Asíncrono ✅ COMPLETA
 - [x] Leaderboard global (`/leaderboard`, API `leaderboard`)
 - [x] Mercado de fichajes entre usuarios reales
 - [x] Feed global de actividad (`/feed`, `activityLog`)
-- [ ] Perfil público de jugador compartible
-- [ ] Rivalidades y comparativas directas entre jugadores
+- [x] Perfil público de jugador compartible (`/jugador/[id]`, sin sesión, con Open Graph e imagen dinámica; toggle de privacidad `perfilPublicoOculto` en Ajustes)
+- [x] Rivalidades y comparativas directas entre jugadores (`/comparar/[id]`, API `comparar`/`rival`; tarjeta "Tu rival" en dashboard, enlace desde cada fila del leaderboard)
 
-### Fase 5 — Contenido y Pulido Final ⬜ NO INICIADA
+### Fase 5 — Contenido y Pulido Final 🟡 EN CURSO
 - [x] Integración Gemini Flash (ya en uso, no solo pendiente)
-- [ ] Animaciones de partidos: goles, celebraciones, tarjetas (más allá del engine textual actual)
-- [ ] Efectos de sonido y música de fondo
-- [ ] PWA instalable en móvil
+- [x] Animaciones de partidos: goles, celebraciones, tarjeta amarilla/roja y trofeo 3D (Fase D three.js, ver `.claude/context.md`) — más allá del engine textual original
+- [x] Efectos de sonido (`src/lib/sound.ts`: dados, resultados, goles, trofeos) — música de fondo sigue sin implementar
+- [x] PWA instalable en móvil (`public/manifest.json`, `public/sw.js`, `RegisterServiceWorker.tsx`, iconos dinámicos)
 - [ ] Optimización de rendimiento y SEO
-- [x] Vitest configurado (`pnpm test`) con primeros tests sobre funciones puras (`src/lib/world.ts`: ascenso/descenso, puntos de liga; `src/engine/decision.ts`: motor de resolución de decisiones). Pendiente ampliar cobertura (career.ts, competition.ts, match-interactive.ts) y añadir Playwright para flujos end-to-end.
-- [ ] Perfil público compartible + Open Graph
+- [x] Vitest configurado (`pnpm test`) con cobertura de `world.ts`, `player-config.ts`, `career-events.ts`, `player.ts`, `decision.ts`, `match-interactive.ts`, `quick-sim.ts`, `streak.ts`, `premium.ts` (129 tests). Pendiente añadir Playwright para flujos end-to-end.
 
 ---
 
@@ -91,12 +90,7 @@ transfer_listing / transfer_offer       → mercado de fichajes
 activity_log                            → feed global
 ```
 
-Pendiente de añadir cuando se aborden las features correspondientes:
-```
-national_call_up   → convocatorias de selección
-tournament          → torneos internacionales
-award                → galardones (Balón de Oro, MVP, Bota de Oro...)
-```
+Selección Nacional, torneos internacionales y galardones ya están implementados (Fase 3), pero sin tablas propias — viven dentro del jsonb `player.state.carrera` (`seleccion`, `premios`, `historialTemporadas`), igual que el resto del estado de carrera. No hizo falta migración para tenerlos.
 
 ---
 
@@ -123,11 +117,13 @@ award                → galardones (Balón de Oro, MVP, Bota de Oro...)
 
 ## Próximos pasos (por prioridad sugerida)
 
-1. **Sistema de galardones** — cierre natural de cada temporada, reutiliza `seasonHistory` y `activityLog` ya existentes. Bajo esfuerzo, alto impacto narrativo.
-2. **Selección nacional / torneos internacionales** — mayor esfuerzo (nuevo ciclo de temporada paralelo), pero es contenido central del roadmap original.
-3. **Perfil público compartible** — aprovecha el mercado/leaderboard ya sociales.
-4. **Testing automatizado** — para poder seguir añadiendo features sin regresiones (no hay tests hoy).
-5. **PWA + pulido visual/sonido** — última fase, cuando el contenido esté cerrado.
+Fases 1, 2 y 4 completas; de la Fase 3 solo queda reputación/popularidad (sin diseñar). Lo que sigue, sin orden de fase fijo:
+
+1. **Score de "gloria" unificado** — el leaderboard hoy ordena por nivel/reputación/temporadas por separado, no por un mérito de carrera ponderado (títulos por tamaño de club, idolatría). Reutiliza datos que ya existen (`premios`, `historialTemporadas`). Ver `informe-fallos.md`, Ronda 3.
+2. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
+3. **Testing automatizado end-to-end** — Vitest cubre bien la lógica pura; falta Playwright para flujos completos (crear personaje → temporada → partido → fin de temporada).
+4. **Optimización de rendimiento y SEO.**
+5. **Música de fondo** — los efectos de sonido puntuales ya existen, falta el ambiente continuo.
 
 ---
 
