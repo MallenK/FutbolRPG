@@ -8,6 +8,7 @@ import { type CareerEvent, type OpcionEvento } from "@/engine/career-events"
 import { getEventNarrative, getSeasonNarrative } from "@/lib/narrative"
 import VideoLoader from "@/components/VideoLoader"
 import { POSITION_LABELS } from "@/lib/player-config"
+import { playSound } from "@/lib/sound"
 
 const TrophyScene = dynamic(() => import("@/components/TrophyScene"), {
   ssr: false,
@@ -367,6 +368,7 @@ export default function SeasonPage() {
       const resumen = data.resumen
       setSummary(resumen)
       setPhase("season_summary")
+      playSound(resumen.premios?.length > 0 ? "trofeo" : "exito")
 
       if (playerState) {
         setSeasonNarrativeLoading(true)

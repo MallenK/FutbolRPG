@@ -14,6 +14,7 @@ type PreferenciasPatch = Partial<{
   ocultoEnActividad: boolean
   perfilPublicoOculto: boolean
   notificacionesOfertasDesactivadas: boolean
+  sonidoDesactivado: boolean
 }>
 
 export async function PATCH(req: NextRequest) {

@@ -11,10 +11,12 @@ import {
 } from "@/lib/auth-client"
 import VideoLoader from "@/components/VideoLoader"
 import { setReducedMotionOverride, getStoredReducedMotionOverride } from "@/lib/use-reduced-motion"
+import { setSoundOverride, isSoundEnabled, playSound } from "@/lib/sound"
 import type { SeasonHistoryEntry } from "@/lib/world"
 
 type Preferencias = {
   reducirMovimiento?: boolean
+  sonidoDesactivado?: boolean
   ocultarAvisoMercado?: boolean
   ocultoEnRanking?: boolean
   ocultoEnActividad?: boolean
@@ -110,6 +112,7 @@ export default function SettingsPage() {
   const [profileLoading, setProfileLoading] = useState(false)
 
   const [reducirMovimiento, setReducirMovimientoState] = useState(false)
+  const [sonidoDesactivado, setSonidoDesactivadoState] = useState(false)
   const [ocultarAvisoMercado, setOcultarAvisoMercado] = useState(false)
   const [ocultoEnRanking, setOcultoEnRanking] = useState(false)
   const [ocultoEnActividad, setOcultoEnActividad] = useState(false)
@@ -135,6 +138,9 @@ export default function SettingsPage() {
           const localOverride = getStoredReducedMotionOverride()
           setReducirMovimientoState(prefs.reducirMovimiento ?? localOverride)
           if (prefs.reducirMovimiento && !localOverride) setReducedMotionOverride(true)
+          const localSoundDisabled = !isSoundEnabled()
+          setSonidoDesactivadoState(prefs.sonidoDesactivado ?? localSoundDisabled)
+          if (prefs.sonidoDesactivado && !localSoundDisabled) setSoundOverride(true)
           setOcultarAvisoMercado(prefs.ocultarAvisoMercado ?? false)
           setOcultoEnRanking(prefs.ocultoEnRanking ?? false)
           setOcultoEnActividad(prefs.ocultoEnActividad ?? false)
@@ -253,6 +259,13 @@ export default function SettingsPage() {
     setReducirMovimientoState(value)
     setReducedMotionOverride(value)
     savePreference({ reducirMovimiento: value })
+  }
+
+  function handleToggleSonido(value: boolean) {
+    setSonidoDesactivadoState(value)
+    setSoundOverride(value)
+    savePreference({ sonidoDesactivado: value })
+    if (!value) playSound("exito") // pequeña muestra al reactivarlo, para saber a qué volumen queda
   }
 
   function handleExport() {
@@ -551,6 +564,12 @@ export default function SettingsPage() {
                 description="Muestra la imagen estática en vez del vídeo en las pantallas de carga, aunque el sistema no lo pida."
                 checked={reducirMovimiento}
                 onChange={handleToggleReducedMotion}
+              />
+              <ToggleRow
+                label="Desactivar sonido"
+                description="Silencia los efectos de sonido del partido (dados, goles, resultados) y de la temporada."
+                checked={sonidoDesactivado}
+                onChange={handleToggleSonido}
               />
               <ToggleRow
                 label="Ocultar aviso de ofertas de mercado"

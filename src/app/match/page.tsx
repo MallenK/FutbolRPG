@@ -35,6 +35,11 @@ import {
 import { resolveStatValue } from "@/engine/decision"
 import { getMatchNarrative } from "@/lib/narrative"
 import { getResultLabel } from "@/lib/result-display"
+import { playSound, type SoundName } from "@/lib/sound"
+
+const RESULT_SOUND: Record<string, SoundName> = {
+  PERFECTO: "perfecto", EXITO: "exito", PARCIAL: "parcial", FALLO: "fallo", CRITICO_FALLO: "critico_fallo",
+}
 import {
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
@@ -289,6 +294,7 @@ function MatchPageInner() {
     setDiceRoll(roll)
     setDiceRolling(true)
     setPhase("rolling")
+    playSound("dado")
   }
 
   const handleDiceComplete = useCallback(() => {
@@ -320,6 +326,12 @@ function MatchPageInner() {
       expulsado = true
     }
     const result = { ...rawResult, tarjeta }
+
+    // Un único sonido por turno, no varios a la vez -- gol es lo más
+    // relevante, luego tarjeta, si no hay ninguno el resultado general.
+    if (result.gol) playSound("gol")
+    else if (tarjeta) playSound("tarjeta")
+    else playSound(RESULT_SOUND[result.resultado] ?? "exito")
 
     setLastResult(result)
     setLastEncajado(result.marcador.visitante > matchState.marcador.visitante)
