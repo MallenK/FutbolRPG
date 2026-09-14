@@ -7,7 +7,7 @@ import { useSession } from "@/lib/auth-client"
 import { type CareerEvent, type OpcionEvento } from "@/engine/career-events"
 import { getEventNarrative, getSeasonNarrative } from "@/lib/narrative"
 import VideoLoader from "@/components/VideoLoader"
-import { POSITION_LABELS } from "@/lib/player-config"
+import { POSITION_LABELS, NATIONALITY_FLAGS } from "@/lib/player-config"
 import { playSound } from "@/lib/sound"
 
 const TrophyScene = dynamic(() => import("@/components/TrophyScene"), {
@@ -35,6 +35,7 @@ type PlayerState = {
   id: string
   name: string
   position: string
+  nationality: string
   posicionesSecundarias?: string[]
   age: number
   flatStats: Record<string, number>
@@ -159,6 +160,7 @@ export default function SeasonPage() {
       id: player.id,
       name: player.name,
       position: player.position ?? "CM",
+      nationality: player.nationality ?? "España",
       posicionesSecundarias: (player.state?.posicionesSecundarias as string[] | undefined) ?? [],
       age: player.age,
       flatStats: (player.state?.attributes as Record<string, number>) ?? {},
@@ -668,10 +670,10 @@ export default function SeasonPage() {
             {carrera.modoJuego !== "simulado" && phase === "paron" && seleccion?.paron && (
               <div className="bg-gray-900 rounded-2xl border border-red-500/30 p-6 space-y-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🇪🇸</span>
+                  <span className="text-2xl">{NATIONALITY_FLAGS[playerState.nationality] ?? "🏳️"}</span>
                   <div>
                     <p className="text-xs text-red-400 uppercase tracking-wider font-bold">Parón Internacional</p>
-                    <h2 className="text-lg font-black text-white">Selección Nacional</h2>
+                    <h2 className="text-lg font-black text-white">Selección de {playerState.nationality}</h2>
                   </div>
                 </div>
                 <p className="text-gray-400 text-sm">
@@ -690,7 +692,7 @@ export default function SeasonPage() {
                         {next.tipo === "clasificacion" ? "Clasificación" : "Amistoso"} · {next.esLocal ? "En casa" : "Fuera"}
                       </p>
                       <p className="text-lg font-black">
-                        {next.esLocal ? `España vs ${next.rival}` : `${next.rival} vs España`}
+                        {next.esLocal ? `${playerState.nationality} vs ${next.rival}` : `${next.rival} vs ${playerState.nationality}`}
                       </p>
                       <button
                         onClick={() => router.push("/match?tipo=seleccion")}
@@ -1101,6 +1103,7 @@ export default function SeasonPage() {
         {tab === "seleccion" && seleccion && (
           <SeleccionPanel
             seleccion={seleccion}
+            nacionalidad={playerState.nationality}
             onPlayParon={() => router.push("/match?tipo=seleccion")}
             onPlayTorneo={() => router.push("/match?tipo=seleccion_torneo")}
           />
@@ -1114,10 +1117,12 @@ export default function SeasonPage() {
 
 function SeleccionPanel({
   seleccion,
+  nacionalidad,
   onPlayParon,
   onPlayTorneo,
 }: {
   seleccion: SeleccionState
+  nacionalidad: string
   onPlayParon: () => void
   onPlayTorneo: () => void
 }) {
@@ -1131,8 +1136,8 @@ function SeleccionPanel({
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🇪🇸</span>
-            <h3 className="font-black text-white">Selección Nacional</h3>
+            <span className="text-2xl">{NATIONALITY_FLAGS[nacionalidad] ?? "🏳️"}</span>
+            <h3 className="font-black text-white">Selección de {nacionalidad}</h3>
           </div>
           {torneo?.campeon && <span className="text-yellow-400 font-bold text-sm">CAMPEÓN</span>}
         </div>
@@ -1157,7 +1162,7 @@ function SeleccionPanel({
                 {next.tipo === "clasificacion" ? "Partido de Clasificación" : "Amistoso"}
               </p>
               <p className="text-lg font-black">
-                {next.esLocal ? `España vs ${next.rival}` : `${next.rival} vs España`}
+                {next.esLocal ? `${nacionalidad} vs ${next.rival}` : `${next.rival} vs ${nacionalidad}`}
               </p>
               <button
                 onClick={onPlayParon}
@@ -1226,7 +1231,7 @@ function SeleccionPanel({
                 <p className="text-xs text-gray-500 uppercase tracking-wider">
                   Partido {torneo.grupoPartidos.filter((p) => p.jugado).length + 1}/6 · {next.esLocal ? "Local" : "Fuera"}
                 </p>
-                <p className="text-lg font-black">{next.esLocal ? `España vs ${next.rival}` : `${next.rival} vs España`}</p>
+                <p className="text-lg font-black">{next.esLocal ? `${nacionalidad} vs ${next.rival}` : `${next.rival} vs ${nacionalidad}`}</p>
                 <button
                   onClick={onPlayTorneo}
                   className="w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-sm transition-colors"
@@ -1245,7 +1250,7 @@ function SeleccionPanel({
                 <p className="text-xs text-gray-500 uppercase tracking-wider">
                   {rondaNames[el.rondaIdx] ?? "Eliminatoria"} · {el.esLocal ? "Local" : "Fuera"}
                 </p>
-                <p className="text-lg font-black">España vs {el.rival}</p>
+                <p className="text-lg font-black">{nacionalidad} vs {el.rival}</p>
                 <button
                   onClick={onPlayTorneo}
                   className="w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-sm transition-colors"

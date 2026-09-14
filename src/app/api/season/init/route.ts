@@ -73,7 +73,7 @@ export async function POST() {
   const existingSeleccion = (carrera?.seleccion as SeleccionState | undefined)
   const torneoTipo = getTorneoTipo(temporada)
   const torneoElegible = !seleccionLocked(isPremium) && reputacion >= 50 && division >= 3
-  const newTorneo = torneoTipo && torneoElegible ? generateSeleccionTorneo(torneoTipo) : undefined
+  const newTorneo = torneoTipo && torneoElegible ? generateSeleccionTorneo(torneoTipo, found.nationality) : undefined
   const seleccion: SeleccionState = {
     convocado: !seleccionLocked(isPremium) && reputacion >= 35 && division >= 3,
     capas: existingSeleccion?.capas ?? 0,

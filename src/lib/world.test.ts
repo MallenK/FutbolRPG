@@ -15,6 +15,7 @@ import {
   generateSeleccionTorneo,
   advanceSeleccionTorneoGrupo,
   advanceSeleccionTorneoEliminatoria,
+  generateSeleccionParon,
   generateContrato,
   getTorneoTipo,
   simularPartidoSancion,
@@ -281,6 +282,34 @@ describe("generateSeleccionTorneo / advanceSeleccionTorneoGrupo / advanceSelecci
     }
     expect(avance.fase).toBe("finalizado")
     expect(avance.campeon).toBe(true)
+  })
+
+  it("nunca genera un rival igual a la propia nacionalidad del jugador", () => {
+    // "Argentina" está en el pool de rivales de torneo — sin el filtro por
+    // nacionalidad, un jugador argentino podría acabar jugando contra sí mismo.
+    for (let i = 0; i < 20; i++) {
+      const torneo = generateSeleccionTorneo("mundial", "Argentina")
+      expect(torneo.grupoPartidos.every((p) => p.rival !== "Argentina")).toBe(true)
+
+      let avanzado = torneo
+      for (let j = 0; j < 6; j++) {
+        avanzado = advanceSeleccionTorneoGrupo(avanzado, j, true, false, "1-0", 1, "Argentina")
+      }
+      expect(avanzado.eliminatoria?.rival).not.toBe("Argentina")
+
+      const siguienteRonda = advanceSeleccionTorneoEliminatoria(avanzado, true, "1-0", "Argentina")
+      expect(siguienteRonda.eliminatoria?.rival).not.toBe("Argentina")
+    }
+  })
+})
+
+describe("generateSeleccionParon", () => {
+  it("nunca genera un rival igual a la propia nacionalidad del jugador", () => {
+    // "Francia" está en el pool de amistosos — mismo motivo que en el torneo.
+    for (let i = 0; i < 20; i++) {
+      const paron = generateSeleccionParon(1, "Francia")
+      expect(paron.partidos.every((p) => p.rival !== "Francia")).toBe(true)
+    }
   })
 })
 

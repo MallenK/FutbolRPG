@@ -36,6 +36,7 @@ import { resolveStatValue } from "@/engine/decision"
 import { getMatchNarrative } from "@/lib/narrative"
 import { getResultLabel } from "@/lib/result-display"
 import { playSound, type SoundName } from "@/lib/sound"
+import { NATIONALITY_FLAGS } from "@/lib/player-config"
 
 const RESULT_SOUND: Record<string, SoundName> = {
   PERFECTO: "perfecto", EXITO: "exito", PARCIAL: "parcial", FALLO: "fallo", CRITICO_FALLO: "critico_fallo",
@@ -145,6 +146,7 @@ const POSICION_LABELS: Partial<Record<Posicion, string>> = {
 function buildMatchContext(
   tipo: string,
   dbState: Record<string, unknown>,
+  nationality: string,
 ): MatchContext {
   const carrera = dbState.carrera as Record<string, unknown>
   const club = (carrera?.club as string) ?? "—"
@@ -188,7 +190,7 @@ function buildMatchContext(
       tipo: "seleccion",
       rival: nextParonMatch?.rival ?? "Rival",
       esLocal: nextParonMatch?.esLocal ?? true,
-      club: "España",
+      club: nationality,
       competicion: "Selección Nacional",
       ronda: rondaLabel,
     }
@@ -204,7 +206,7 @@ function buildMatchContext(
         tipo: "seleccion_torneo",
         rival: nextMatch?.rival ?? "Rival",
         esLocal: nextMatch?.esLocal ?? true,
-        club: "España",
+        club: nationality,
         competicion: torneoLabel,
         ronda: "Fase de Grupos",
       }
@@ -216,7 +218,7 @@ function buildMatchContext(
         tipo: "seleccion_torneo",
         rival: torneo.eliminatoria.rival,
         esLocal: torneo.eliminatoria.esLocal,
-        club: "España",
+        club: nationality,
         competicion: torneoLabel,
         ronda: rondaNames[torneo.eliminatoria.rondaIdx] ?? "Eliminatoria",
       }
@@ -274,7 +276,7 @@ function MatchPageInner() {
         if (!dbPlayer) { router.push("/create-player"); return }
         const mapped = mapDbPlayer(dbPlayer as DbPlayer)
         setEnginePlayer(mapped)
-        const ctx = buildMatchContext(tipo, dbPlayer.state as Record<string, unknown>)
+        const ctx = buildMatchContext(tipo, dbPlayer.state as Record<string, unknown>, dbPlayer.nationality)
         setMatchContext(ctx)
         const state = initMatchState()
         setMatchState(state)
@@ -572,7 +574,9 @@ function MatchPageInner() {
               : "bg-yellow-500/10 border-yellow-500/30"
           }`}>
             <span className={`text-sm font-bold ${matchContext.tipo === "seleccion" || matchContext.tipo === "seleccion_torneo" ? "text-red-400" : "text-yellow-400"}`}>
-              {matchContext.tipo === "seleccion" || matchContext.tipo === "seleccion_torneo" ? "🇪🇸 " : ""}
+              {matchContext.tipo === "seleccion" || matchContext.tipo === "seleccion_torneo"
+                ? `${NATIONALITY_FLAGS[matchContext.club] ?? "🏳️"} `
+                : ""}
               {matchContext.competicion}
             </span>
             <span className={`text-xs ${matchContext.tipo === "seleccion" || matchContext.tipo === "seleccion_torneo" ? "text-red-300/60" : "text-yellow-300/60"}`}>{matchContext.ronda}</span>

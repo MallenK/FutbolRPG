@@ -470,12 +470,22 @@ export function getTorneoTipo(temporada: number): "eurocopa" | "mundial" | null 
   return null
 }
 
-export function generateSeleccionParon(temporada: number): SeleccionParon {
+// Varios países de los pools de rivales (Argentina, Brasil, Marruecos...)
+// también son nacionalidades elegibles al crear personaje — sin este filtro,
+// un jugador podría acabar enfrentando a su propia selección.
+function excludeOwnNationality(pool: string[], nacionalidad?: string): string[] {
+  if (!nacionalidad) return pool
+  const filtered = pool.filter((r) => r !== nacionalidad)
+  return filtered.length > 0 ? filtered : pool
+}
+
+export function generateSeleccionParon(temporada: number, nacionalidad?: string): SeleccionParon {
   const torneoTipo = getTorneoTipo(temporada)
   const tipo = torneoTipo ? "clasificacion" : "amistoso"
-  const pool = tipo === "clasificacion"
-    ? [...SELECCION_RIVALES_CLASIFICACION]
-    : [...SELECCION_RIVALES_AMISTOSO]
+  const pool = excludeOwnNationality(
+    tipo === "clasificacion" ? [...SELECCION_RIVALES_CLASIFICACION] : [...SELECCION_RIVALES_AMISTOSO],
+    nacionalidad,
+  )
   const r1idx = Math.floor(Math.random() * pool.length)
   const rival1 = pool.splice(r1idx, 1)[0]
   const rival2 = pool[Math.floor(Math.random() * pool.length)]
@@ -506,8 +516,8 @@ export function advanceSeleccionParon(
   return { ...paron, partidos: newPartidos, partidosJugados: newJugados, activo: !allDone }
 }
 
-export function generateSeleccionTorneo(tipo: "eurocopa" | "mundial"): SeleccionTorneo {
-  const pool = [...SELECCION_RIVALES_TORNEO]
+export function generateSeleccionTorneo(tipo: "eurocopa" | "mundial", nacionalidad?: string): SeleccionTorneo {
+  const pool = excludeOwnNationality([...SELECCION_RIVALES_TORNEO], nacionalidad)
   const rivals: string[] = []
   for (let i = 0; i < 3; i++) {
     const idx = Math.floor(Math.random() * pool.length)
@@ -534,6 +544,7 @@ export function advanceSeleccionTorneoGrupo(
   empate: boolean,
   resultado: string,
   golesJugador: number,
+  nacionalidad?: string,
 ): SeleccionTorneo {
   const newPartidos = torneo.grupoPartidos.map((p) =>
     p.idx === idx ? { ...p, jugado: true, resultado, ganado, empate, golesJugador } : p
@@ -555,7 +566,7 @@ export function advanceSeleccionTorneoGrupo(
     newTorneo = {
       ...newTorneo, fase: "eliminatoria",
       eliminatoria: {
-        rondaIdx: 0, rival: pickRandom(SELECCION_RIVALES_TORNEO),
+        rondaIdx: 0, rival: pickRandom(excludeOwnNationality(SELECCION_RIVALES_TORNEO, nacionalidad)),
         esLocal: false, jugado: false, historial: [],
       },
     }
@@ -569,6 +580,7 @@ export function advanceSeleccionTorneoEliminatoria(
   torneo: SeleccionTorneo,
   ganado: boolean,
   resultado: string,
+  nacionalidad?: string,
 ): SeleccionTorneo {
   if (!torneo.eliminatoria) return torneo
   const el = torneo.eliminatoria
@@ -589,7 +601,7 @@ export function advanceSeleccionTorneoEliminatoria(
     ...torneo,
     eliminatoria: {
       ...el, rondaIdx: nextRondaIdx,
-      rival: pickRandom(SELECCION_RIVALES_TORNEO.filter((r) => r !== el.rival)),
+      rival: pickRandom(excludeOwnNationality(SELECCION_RIVALES_TORNEO.filter((r) => r !== el.rival), nacionalidad)),
       esLocal: false, jugado: false, ganado: undefined,
       historial: newHistorial,
     },

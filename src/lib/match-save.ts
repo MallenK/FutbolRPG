@@ -172,7 +172,7 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
         !existingSel?.paron?.activo
       ) {
         const temporada = (carrera?.temporada as number) ?? 1
-        const paron = generateSeleccionParon(temporada)
+        const paron = generateSeleccionParon(temporada, found.nationality)
         seleccion = { ...(existingSel ?? { convocado: true, capas: 0, golesSeleccion: 0 }), paron }
       }
     }
@@ -253,7 +253,7 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
       const nextMatch = torneo.grupoPartidos.find((p) => !p.jugado)
       if (nextMatch) {
         const newTorneo = advanceSeleccionTorneoGrupo(
-          torneo, nextMatch.idx, ganado, empate, marcador, golesJugador,
+          torneo, nextMatch.idx, ganado, empate, marcador, golesJugador, found.nationality,
         )
         seleccion = {
           ...seleccion, torneo: newTorneo,
@@ -262,7 +262,7 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
         }
       }
     } else if (torneo.fase === "eliminatoria" && torneo.eliminatoria && !torneo.eliminatoria.jugado) {
-      const newTorneo = advanceSeleccionTorneoEliminatoria(torneo, ganado, marcador)
+      const newTorneo = advanceSeleccionTorneoEliminatoria(torneo, ganado, marcador, found.nationality)
       seleccion = {
         ...seleccion, torneo: newTorneo,
         capas: seleccion.capas + 1,
