@@ -4,7 +4,7 @@ import { player, activityLog } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
-import { pickRandomEvent, type PlayerContext } from "@/engine/career-events"
+import { pickRandomEvent, type PlayerContext, type CareerEvent } from "@/engine/career-events"
 import { createId } from "@/lib/id"
 import {
   advanceCopa,
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   let jornadaActual = (carrera?.jornadaActual as number) ?? 0
   let fixtures = (carrera?.fixtures as Fixture[]) ?? []
   let eventoActual = (carrera?.eventoActual as object | null) ?? null
+  let eventosPendientes = (carrera?.eventosPendientes as object[]) ?? []
   let seleccion = (carrera?.seleccion as SeleccionState | undefined) ?? undefined
 
   if (tipo === "liga" && jornadaActual > 0 && jornadaActual <= 16) {
@@ -169,7 +170,23 @@ export async function POST(req: NextRequest) {
         reputacion: (carrera?.reputacion as number) ?? undefined,
         stats: (found.state as Record<string, unknown>)?.attributes as Record<string, number> | undefined,
       }
-      eventoActual = pickRandomEvent(jornadaActual, division, resolvedIds, ctx)
+
+      // Ráfaga de eventos de carrera fuera del partido: en vez de uno solo,
+      // se genera un lote de 2 a 6 eventos únicos que se irán mostrando uno
+      // tras otro (ver eventosPendientes en season/event/route.ts) sin tener
+      // que esperar al siguiente partido para ver el próximo.
+      const burstSize = 2 + Math.floor(Math.random() * 5) // 2..6
+      const excluded = [...resolvedIds]
+      const burst: CareerEvent[] = []
+      for (let i = 0; i < burstSize; i++) {
+        const evento = pickRandomEvent(jornadaActual, division, excluded, ctx)
+        if (burst.some((e) => e.id === evento.id)) break // pool agotado, no seguir repitiendo
+        burst.push(evento)
+        excluded.push(evento.id)
+      }
+
+      eventoActual = burst[0] ?? null
+      eventosPendientes = burst.slice(1)
     }
   }
 
@@ -246,6 +263,7 @@ export async function POST(req: NextRequest) {
     jornadaActual,
     fixtures,
     eventoActual,
+    eventosPendientes,
     reputacion: newRep,
     sancion: newSancion,
     ...(copa !== undefined ? { copa } : {}),

@@ -96,6 +96,7 @@ export async function POST() {
     seleccion,
     contrato,
     eventoActual: null,
+    eventosPendientes: [],
     premios: [],
   }
 

@@ -18,6 +18,13 @@ export interface Situacion {
   // Situación defensiva sobre la propia portería (portero): fallar aquí puede
   // encajar un gol real, no dar una oportunidad de gol propio.
   peligroPropio?: boolean
+  // Posiciones de campo para las que esta situación es especialmente típica
+  // (p.ej. un central rara vez encara mano a mano al portero). No es un
+  // filtro estricto -- sin esto se vaciarían pools pequeños en momentos de
+  // alta dificultad -- sino un peso: getSituacionForTurn hace 3 veces más
+  // probable elegirla para esas posiciones. Sin `posiciones`, la situación
+  // es igual de probable para cualquier posición de campo.
+  posiciones?: Posicion[]
 }
 
 export interface TurnResult {
@@ -49,6 +56,10 @@ export interface InteractiveMatchState {
   log: TurnResult[]
   tarjetasAmarillas: number
   expulsado: boolean
+  // ids de las últimas situaciones jugadas, usado por getSituacionForTurn
+  // para no repetir la misma situación dos veces seguidas (ni demasiado
+  // pronto dentro del mismo partido).
+  situacionesRecientes: string[]
 }
 
 // Situaciones de entrada/falta cuyo texto narrativo ya insinuaba tarjetas
@@ -89,6 +100,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 50, presionSituacional: 30, bonusContexto: 0 },
     esOportunidadGol: true,
+    posiciones: [Posicion.DELANTERO, Posicion.EXTREMO, Posicion.MEDIAPUNTA],
     opciones: [
       {
         id: "tiro_seguro",
@@ -188,6 +200,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 50, presionSituacional: 20, bonusContexto: 10 },
     esOportunidadGol: true,
+    posiciones: [Posicion.DELANTERO],
     opciones: [
       {
         id: "control_tiro",
@@ -485,6 +498,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 58, presionSituacional: 10, bonusContexto: 5 },
     esOportunidadGol: true,
+    posiciones: [Posicion.MEDIOCENTRO, Posicion.MEDIAPUNTA, Posicion.EXTREMO],
     opciones: [
       {
         id: "disparo_ajustado",
@@ -584,6 +598,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 42, presionSituacional: 25, bonusContexto: 5 },
     esOportunidadGol: true,
+    posiciones: [Posicion.DELANTERO, Posicion.MEDIAPUNTA],
     opciones: [
       {
         id: "empuje_rapido",
@@ -685,6 +700,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 40, presionSituacional: 0, bonusContexto: 5 },
     esOportunidadGol: false,
+    posiciones: [Posicion.MEDIOCENTRO, Posicion.DEFENSA_CENTRAL],
     opciones: [
       {
         id: "sprint_presion",
@@ -784,6 +800,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 45, presionSituacional: 15, bonusContexto: 0 },
     esOportunidadGol: false,
+    posiciones: [Posicion.DELANTERO, Posicion.MEDIAPUNTA],
     opciones: [
       {
         id: "pivotear",
@@ -883,6 +900,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 45, presionSituacional: 10, bonusContexto: 15 },
     esOportunidadGol: false,
+    posiciones: [Posicion.MEDIOCENTRO, Posicion.MEDIAPUNTA, Posicion.EXTREMO],
     opciones: [
       {
         id: "pase_profundidad",
@@ -982,6 +1000,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 48, presionSituacional: 10, bonusContexto: 0 },
     esOportunidadGol: false,
+    posiciones: [Posicion.LATERAL, Posicion.EXTREMO],
     opciones: [
       {
         id: "desborde_velocidad",
@@ -1081,6 +1100,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 50, presionSituacional: 15, bonusContexto: 10 },
     esOportunidadGol: false,
+    posiciones: [Posicion.MEDIOCENTRO, Posicion.MEDIAPUNTA],
     opciones: [
       {
         id: "pase_filtrado",
@@ -1180,6 +1200,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 42, presionSituacional: 5, bonusContexto: 0 },
     esOportunidadGol: false,
+    posiciones: [Posicion.DEFENSA_CENTRAL, Posicion.MEDIOCENTRO],
     opciones: [
       {
         id: "entrada_limpia",
@@ -1378,6 +1399,7 @@ const SITUACIONES: Situacion[] = [
     minuto: 0,
     contexto: { dificultadBase: 48, presionSituacional: 30, bonusContexto: 0 },
     esOportunidadGol: false,
+    posiciones: [Posicion.DEFENSA_CENTRAL, Posicion.LATERAL, Posicion.MEDIOCENTRO],
     opciones: [
       {
         id: "sprint_recuperar",
@@ -1773,6 +1795,307 @@ const SITUACIONES: Situacion[] = [
       },
     ],
   },
+  // ── Nuevas situaciones (ampliación de variedad) ─────────────────────────
+  {
+    id: "disparo_media_distancia",
+    descripcion: "El balón te llega de rechace en la frontal del área. Espacio para disparar.",
+    minuto: 0,
+    contexto: { dificultadBase: 55, presionSituacional: 25, bonusContexto: 0 },
+    esOportunidadGol: true,
+    posiciones: [Posicion.MEDIOCENTRO, Posicion.MEDIAPUNTA, Posicion.EXTREMO],
+    opciones: [
+      {
+        id: "vaselina_lejana",
+        texto: "Probar un disparo raso y ajustado",
+        tipo: "TECNICO",
+        statPrincipal: "tiro",
+        pesoStat: 1.0,
+        riesgo: 0.25,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "¡Un misil imposible de detener! Se cuela pegado al poste desde fuera del área.",
+            "Golazo por toda la escuadra. El portero ni siquiera reacciona.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Disparo raso y colocado que se cuela junto al poste. Gol.",
+            "El portero llega tarde al bote. Dentro.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "El portero desvía a córner con esfuerzo. Buena ocasión desperdiciada.",
+            "El balón sale rozando el poste. Cerca, pero no entra.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Disparo sin fuerza. El portero lo controla sin problema.",
+            "Se va muy desviado. El público protesta.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "El disparo se va a la grada. Un regalo para el rival, que sale rápido al contraataque.",
+            "Tropiezas justo al golpear. El balón apenas se mueve.",
+          ],
+        },
+      },
+      {
+        id: "amortiguar_y_pasar",
+        texto: "Amortiguar y buscar a un compañero mejor colocado",
+        tipo: "TACTICO",
+        statPrincipal: "vision",
+        pesoStat: 1.0,
+        riesgo: 0.15,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Pase milimétrico que deja a tu compañero solo. Asistencia de manual.",
+            "Ves el hueco antes que nadie. Pase perfecto para el gol.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Buen pase que genera una ocasión clara para el equipo.",
+            "El balón llega bien colocado. Buena decisión.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "El pase llega algo largo. El compañero no puede rematar con comodidad.",
+            "Se corta el balón. Ocasión perdida, pero se mantiene la posesión.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Pierdes el balón sin necesidad. El rival recupera fácil.",
+            "El pase no encuentra a nadie. Se pierde la jugada.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Pase directo al rival. Contraataque inmediato en contra.",
+            "Un error de bulto que deja a todo el equipo mal colocado.",
+          ],
+        },
+      },
+      {
+        id: "encarar_defensa_lejana",
+        texto: "Encarar y ganar la espalda a la defensa",
+        tipo: "AGRESIVO",
+        statPrincipal: "regate",
+        pesoStat: 0.9,
+        riesgo: 0.35,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Superas a dos defensas con un cambio de ritmo brutal y quedas solo ante el portero. ¡Golazo!",
+            "Regate limpio y definición perfecta. El estadio se levanta.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Ganas la espalda a la defensa y resuelves con solvencia. Gol.",
+            "Buen arranque que termina en gol tras superar al último hombre.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Te frenan justo antes del área. Se saca córner.",
+            "El regate sale a medias, el balón acaba fuera por poco.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "La defensa te cierra el paso sin problema.",
+            "Pierdes el control al encarar. Jugada cortada.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te quitan el balón con facilidad y salen a la contra con espacio de sobra.",
+            "Un control desastroso te deja fuera de la jugada por completo.",
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "recuperacion_campo_propio",
+    descripcion: "El rival construye desde atrás. Tienes ocasión de presionar y recuperar en campo propio.",
+    minuto: 0,
+    contexto: { dificultadBase: 45, presionSituacional: 20, bonusContexto: 0 },
+    esOportunidadGol: false,
+    posiciones: [Posicion.DEFENSA_CENTRAL, Posicion.MEDIOCENTRO, Posicion.LATERAL],
+    opciones: [
+      {
+        id: "presion_organizada",
+        texto: "Presionar en bloque y cerrar líneas de pase",
+        tipo: "TACTICO",
+        statPrincipal: "posicionamiento",
+        pesoStat: 1.0,
+        riesgo: 0.15,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "La presión asfixia al rival, que pierde el balón sin remedio. Recuperación perfecta.",
+            "Cierras todos los ángulos de pase. El rival se equivoca y recuperas.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "La presión da resultado. Recuperas el balón en buena zona.",
+            "El rival se ve forzado a un pase largo impreciso. Ganancia para tu equipo.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "La presión no es suficiente, pero se gana algo de terreno.",
+            "El rival se libra por poco, aunque pierde tiempo.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "La presión llega tarde y el rival progresa con comodidad.",
+            "Te desmarcas mal de tu posición y dejas un hueco.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+                "Sales mal de la presión y dejas un espacio enorme a la espalda. Ocasión clara para el rival.",
+            "Pierdes la posición completamente. El equipo queda descolocado.",
+          ],
+        },
+      },
+      {
+        id: "entrada_recuperacion",
+        texto: "Ir directo al robo con una entrada firme",
+        tipo: "AGRESIVO",
+        statPrincipal: "fuerza",
+        pesoStat: 0.95,
+        riesgo: 0.3,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Entrada limpia y contundente. Te llevas el balón sin dejar rastro de falta.",
+            "Robo perfecto que además inicia un contraataque peligroso.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Buena entrada, recuperas el balón con algo de contacto.",
+            "Te llevas el balón, aunque el árbitro deja seguir con protestas.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "El balón queda suelto tras el choque. Disputa incierta.",
+            "Entrada dura pero el balón sale fuera. Saque de banda.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Llegas tarde a la entrada y el rival te supera con facilidad.",
+            "El rival anticipa la entrada y te deja en el suelo.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Entrada temeraria. El árbitro no duda en sacar tarjeta.",
+            "Fallas por completo la entrada y dejas a tu equipo con un jugador menos en la jugada.",
+          ],
+        },
+      },
+      {
+        id: "cubrir_espacio",
+        texto: "Retrasar la línea y cubrir el espacio en vez de arriesgar",
+        tipo: "SEGURO",
+        statPrincipal: "decisiones",
+        pesoStat: 1.05,
+        riesgo: 0.1,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Lectura perfecta del juego. Anulas cualquier opción de pase peligroso.",
+            "Tu colocación obliga al rival a retroceder el balón. Gran trabajo silencioso.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Buena colocación que reduce el peligro sin arriesgar nada.",
+            "Cubres el espacio con criterio. El rival no encuentra el pase.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Te quedas algo corto, pero el rival tampoco saca partido inmediato.",
+            "La cobertura llega justa, sin generar peligro para ninguno de los dos.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te posicionas mal y dejas una línea de pase abierta.",
+            "El rival encuentra el hueco que debías cubrir.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Un error de posicionamiento grave deja a todo el equipo expuesto.",
+            "Te desconectas de la línea defensiva por completo. Ocasión clara para el rival.",
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "penalti_rival",
+    descripcion: "El árbitro señala penalti en contra. Todo depende de ti bajo palos.",
+    minuto: 0,
+    contexto: { dificultadBase: 60, presionSituacional: 45, bonusContexto: -5 },
+    esOportunidadGol: false,
+    peligroPropio: true,
+    opciones: [
+      {
+        id: "estudiar_lanzador",
+        texto: "Esperar y leer el gesto del lanzador",
+        tipo: "TACTICO",
+        statPrincipal: "concentracion",
+        pesoStat: 1.05,
+        riesgo: 0.2,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Lees perfectamente la intención y detienes el penalti. ¡Paradón!",
+            "Aguantas hasta el último instante y adivinas la esquina exacta. Atajada de leyenda.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Te lanzas al lado correcto y rechazas el disparo. Gran parada.",
+            "Adivinas la esquina y sacas el balón con seguridad.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Tocas el balón pero no puedes evitar el gol. Al menos se lo pusiste difícil.",
+            "Casi la adivinas, pero el balón entra igualmente por la otra esquina.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te vas al lado equivocado. Gol sin opciones.",
+            "El lanzador te engaña por completo. Dentro.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te quedas totalmente estático, sin reaccionar. Gol clarísimo.",
+            "Un error de cálculo te deja completamente descolocado.",
+          ],
+        },
+      },
+      {
+        id: "anticipar_esquina",
+        texto: "Elegir una esquina y lanzarte pronto",
+        tipo: "AGRESIVO",
+        statPrincipal: "reflejos",
+        pesoStat: 1.0,
+        riesgo: 0.35,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Aciertas la esquina desde el primer instante. Parada espectacular.",
+            "Te lanzas con decisión y detienes un disparo perfecto. Increíble.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Aciertas el lado y logras despejar el balón.",
+            "Buena decisión, buena parada.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "Rozas el balón pero no lo puedes sostener. Entra igualmente.",
+            "Casi lo tienes, pero el disparo es demasiado potente.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "Te lanzas al lado equivocado. El lanzador celebra.",
+            "Anticipas mal la esquina. Gol sin remedio.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "Te tiras demasiado pronto y sin criterio. El lanzador ni tiene que pensarlo.",
+            "Un movimiento torpe te deja completamente fuera de sitio.",
+          ],
+        },
+      },
+      {
+        id: "quedarse_centrado",
+        texto: "Quedarte firme en el centro hasta el último momento",
+        tipo: "SEGURO",
+        statPrincipal: "presion",
+        pesoStat: 1.0,
+        riesgo: 0.15,
+        narrativos: {
+          [ResultadoDecision.PERFECTO]: [
+            "Tu templanza desconcierta al lanzador, que dispara flojo al centro. Paradón sin moverte.",
+            "Aguantas la presión con una calma absoluta. Detienes el disparo sin apenas moverte.",
+          ],
+          [ResultadoDecision.EXITO]: [
+            "Tu quietud incomoda al lanzador. Logras despejar el balón.",
+            "Aguantas bien la presión y sacas el balón.",
+          ],
+          [ResultadoDecision.PARCIAL]: [
+            "El lanzador resuelve bien pese a tu templanza. Entra por poco.",
+            "Tocas el balón en el último instante, pero no es suficiente.",
+          ],
+          [ResultadoDecision.FALLO]: [
+            "El lanzador no se deja intimidar y define con claridad. Gol.",
+            "Te quedas quieto de más y el disparo entra sin oposición.",
+          ],
+          [ResultadoDecision.CRITICO_FALLO]: [
+            "La presión te paraliza por completo. Ni siquiera lo intentas.",
+            "Un fallo de concentración te deja completamente fuera de la jugada.",
+          ],
+        },
+      },
+    ],
+  },
 ]
 
 const getTargetDifficulty = (turno: number): number => {
@@ -1788,7 +2111,13 @@ const getTargetDifficulty = (turno: number): number => {
   return 65 + Math.random() * 10
 }
 
-export const getSituacionForTurn = (turno: number, player: Player, posicionEfectiva?: Posicion): Situacion => {
+export const getSituacionForTurn = (
+  turno: number,
+  player: Player,
+  posicionEfectiva?: Posicion,
+  totalTurnos = 5,
+  recentIds: string[] = [],
+): Situacion => {
   let baseDC = getTargetDifficulty(turno)
   if (player.estado.fatiga > 50) baseDC += 5
   baseDC = Math.round(Math.max(30, Math.min(80, baseDC)))
@@ -1810,8 +2139,25 @@ export const getSituacionForTurn = (turno: number, player: Player, posicionEfect
       : situacionesDeCampo
   }
 
-  const template = pool[Math.floor(Math.random() * pool.length)]
-  const minuto = Math.round((turno / 5) * 90)
+  // Anti-repetición: se descartan las últimas situaciones ya jugadas
+  // (dentro de este partido) si eso todavía deja opciones — con pools
+  // pequeños (p.ej. portero, solo 3 situaciones) hay que dejar de excluir
+  // antes de vaciar el pool.
+  const sinRecientes = pool.filter((s) => !recentIds.includes(s.id))
+  if (sinRecientes.length > 0) pool = sinRecientes
+
+  // Sabor por posición: las situaciones marcadas con `posiciones` para la
+  // posición efectiva del jugador pesan 3x en el sorteo. Es un peso, no un
+  // filtro duro, para no arriesgarse a vaciar el pool en momentos de alta
+  // dificultad (donde ya se ha reducido a solo ocasiones de gol).
+  const posicionActual = posicionEfectiva ?? player.posicionPrincipal
+  const weighted = pool.flatMap((s) => {
+    const esTipica = s.posiciones?.includes(posicionActual)
+    return Array(esTipica ? 3 : 1).fill(s)
+  })
+
+  const template = weighted[Math.floor(Math.random() * weighted.length)]
+  const minuto = Math.round((turno / totalTurnos) * 90)
 
   return {
     ...template,
@@ -1978,9 +2324,13 @@ export const getStatLabel = (statKey: string): string => {
   return labels[statKey] ?? statKey.toUpperCase().slice(0, 3)
 }
 
+// Cantidad de situaciones/decisiones del partido: aleatoria entre 2 y 6 en
+// vez de fija en 5, para que cada partido tenga una duración/ritmo distinto.
+const randomTotalTurnos = (): number => 2 + Math.floor(Math.random() * 5)
+
 export const initMatchState = (): InteractiveMatchState => ({
   turno: 1,
-  totalTurnos: 5,
+  totalTurnos: randomTotalTurnos(),
   marcador: { local: 0, visitante: 0 },
   valoracion: 6.0,
   goles: 0,
@@ -1991,4 +2341,5 @@ export const initMatchState = (): InteractiveMatchState => ({
   log: [],
   tarjetasAmarillas: 0,
   expulsado: false,
+  situacionesRecientes: [],
 })
