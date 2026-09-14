@@ -100,6 +100,17 @@ award                → galardones (Balón de Oro, MVP, Bota de Oro...)
 
 ---
 
+## Stripe / Premium
+
+- [x] **Deploy en producción**: https://futbolrpg.vercel.app (Vercel + Neon `futbolrpg-prod`, separada de la DB de desarrollo local).
+- [x] **Modelo**: pago único de 9,99 € (de por vida), sin suscripción. Campos `isPremium`/`stripeCustomerId` en `user` (expuestos en `session.user` vía `additionalFields` de Better Auth).
+- [x] **Límite gratuito**: hasta 5 temporadas de carrera (`FREE_SEASON_LIMIT` en `src/lib/premium.ts`); sin Selección Nacional ni mercado de fichajes entre usuarios.
+- [x] Stripe Checkout (`/api/stripe/checkout`) + webhook (`/api/stripe/webhook`, única fuente de verdad de `isPremium`).
+- [x] Gates aplicados: `season/end` (límite de temporadas), `season/init` + `season/end` (Selección), `market/toggle` + `market/offer` (mercado).
+- [x] UI: banner "Hazte Premium" en dashboard, paywall con CTA al topar el límite de temporadas en `/season`.
+- [ ] **Pendiente antes de cobrar de verdad**: crear cuenta Stripe (o activarla si ya existe), configurar `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` en Vercel, probar el flujo completo en modo test, y solo entonces pasar a claves live.
+- [ ] Paywall visual en `/mercado` (hoy el 402 de `market/toggle`/`market/offer` no se muestra en la UI, solo en `/season`).
+
 ## Próximos pasos (por prioridad sugerida)
 
 1. **Sistema de galardones** — cierre natural de cada temporada, reutiliza `seasonHistory` y `activityLog` ya existentes. Bajo esfuerzo, alto impacto narrativo.

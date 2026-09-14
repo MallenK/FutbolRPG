@@ -4,6 +4,7 @@ import { player } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
+import { seleccionLocked } from "@/lib/premium"
 import {
   getRivales,
   generateCopaState,
@@ -66,13 +67,15 @@ export async function POST() {
   const temporada = (carrera?.temporada as number) ?? 1
   const reputacion = (carrera?.reputacion as number) ?? 10
 
-  // Selección: keep existing caps/goals, generate tournament if tournament year and eligible
+  // Selección: bloqueada en el plan gratuito (ver lib/premium.ts) — el resto de
+  // la lógica de elegibilidad (reputación/división) se mantiene sin tocar.
+  const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
   const existingSeleccion = (carrera?.seleccion as SeleccionState | undefined)
   const torneoTipo = getTorneoTipo(temporada)
-  const torneoElegible = reputacion >= 50 && division >= 3
+  const torneoElegible = !seleccionLocked(isPremium) && reputacion >= 50 && division >= 3
   const newTorneo = torneoTipo && torneoElegible ? generateSeleccionTorneo(torneoTipo) : undefined
   const seleccion: SeleccionState = {
-    convocado: reputacion >= 35 && division >= 3,
+    convocado: !seleccionLocked(isPremium) && reputacion >= 35 && division >= 3,
     capas: existingSeleccion?.capas ?? 0,
     golesSeleccion: existingSeleccion?.golesSeleccion ?? 0,
     paron: undefined,

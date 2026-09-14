@@ -189,6 +189,13 @@ export default function DashboardPage() {
 
   const ultimosPartidos = player?.state.carrera.ultimosPartidos ?? []
   const attrPoints = player?.state.attributePoints ?? 0
+  const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
+
+  const handlePremiumUpgrade = async () => {
+    const res = await fetch("/api/stripe/checkout", { method: "POST" })
+    const data = await res.json()
+    if (data.url) window.location.href = data.url
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -213,6 +220,19 @@ export default function DashboardPage() {
               >
                 {pendingOffers} oferta{pendingOffers > 1 ? "s" : ""} de club
               </button>
+            )}
+            {!isPremium && (
+              <button
+                onClick={handlePremiumUpgrade}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-yellow-500/20 to-yellow-400/10 border border-yellow-500/40 rounded-lg text-yellow-400 text-xs font-bold transition-colors hover:from-yellow-500/30"
+              >
+                ⭐ Hazte Premium
+              </button>
+            )}
+            {isPremium && (
+              <span className="flex items-center gap-1 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-xs font-bold">
+                ⭐ Premium
+              </span>
             )}
             <button
               onClick={() => signOut().then(() => router.push("/"))}

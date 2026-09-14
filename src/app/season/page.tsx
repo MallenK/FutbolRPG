@@ -104,6 +104,19 @@ export default function SeasonPage() {
   const [endingLoading, setEndingLoading] = useState(false)
   const [resolvingSancion, setResolvingSancion] = useState(false)
   const [endError, setEndError] = useState<string | null>(null)
+  const [premiumRequiredMsg, setPremiumRequiredMsg] = useState<string | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+
+  const handleUpgrade = async () => {
+    setCheckoutLoading(true)
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
   const [showEndWarning, setShowEndWarning] = useState(false)
   const [seasonNarrative, setSeasonNarrative] = useState<string | null>(null)
   const [seasonNarrativeLoading, setSeasonNarrativeLoading] = useState(false)
@@ -280,8 +293,14 @@ export default function SeasonPage() {
     setShowEndWarning(false)
     setEndingLoading(true)
     setEndError(null)
+    setPremiumRequiredMsg(null)
     try {
       const res = await fetch("/api/season/end", { method: "POST" })
+      if (res.status === 402) {
+        const data = await res.json()
+        setPremiumRequiredMsg(data.message ?? "Has llegado al límite del plan gratuito.")
+        return
+      }
       if (!res.ok) throw new Error("request failed")
       const data = await res.json()
       const resumen = data.resumen
@@ -739,6 +758,18 @@ export default function SeasonPage() {
                   </button>
                 )}
                 {endError && <p className="text-red-400 text-sm">{endError}</p>}
+                {premiumRequiredMsg && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-5 space-y-3">
+                    <p className="text-yellow-400 font-bold text-sm">🔒 {premiumRequiredMsg}</p>
+                    <button
+                      onClick={handleUpgrade}
+                      disabled={checkoutLoading}
+                      className="px-6 py-2.5 bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-800 text-black font-bold rounded-lg transition-colors text-sm"
+                    >
+                      {checkoutLoading ? "Redirigiendo..." : "Hazte Premium — 9,99 € de por vida"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

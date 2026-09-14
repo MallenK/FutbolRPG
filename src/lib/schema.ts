@@ -18,6 +18,9 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Stripe: pago único que desbloquea el juego completo (ver src/lib/premium.ts)
+  isPremium: boolean("is_premium").notNull().default(false),
+  stripeCustomerId: text("stripe_customer_id"),
 })
 
 export const session = pgTable("session", {

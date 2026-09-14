@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
+import { seasonLimitReached, seleccionLocked, FREE_SEASON_LIMIT } from "@/lib/premium"
 import {
   getRivales,
   getDivisionInfo,
@@ -87,6 +88,15 @@ export async function POST() {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
+
+  const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
+  const temporadaActual = (carrera.temporada as number) ?? 1
+  if (seasonLimitReached(temporadaActual, isPremium)) {
+    return NextResponse.json({
+      error: "premium_required",
+      message: `Has llegado al límite de ${FREE_SEASON_LIMIT} temporadas del plan gratuito. Hazte Premium para continuar tu carrera.`,
+    }, { status: 402 })
+  }
 
   const statsTemporada = carrera.estadisticasTemporada as Record<string, number>
   const valoracionMedia = statsTemporada?.valoracionMedia ?? 6.0
@@ -248,7 +258,7 @@ export async function POST() {
   const newSeleccion: SeleccionState | undefined = seleccionState
     ? {
         ...seleccionState,
-        convocado: newReputacion >= 35 && finalDivision >= 3,
+        convocado: !seleccionLocked(isPremium) && newReputacion >= 35 && finalDivision >= 3,
         paron: undefined,
       }
     : undefined

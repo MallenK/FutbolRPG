@@ -5,10 +5,16 @@ import { eq, and } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
+import { mercadoLocked } from "@/lib/premium"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
+
+  const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
+  if (mercadoLocked(isPremium)) {
+    return NextResponse.json({ error: "premium_required", message: "El mercado de fichajes entre usuarios es una función Premium." }, { status: 402 })
+  }
 
   const { listingId } = await req.json()
   if (!listingId) return NextResponse.json({ error: "Missing listingId" }, { status: 400 })

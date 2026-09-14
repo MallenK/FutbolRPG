@@ -19,6 +19,10 @@ export const auth = betterAuth({
     deleteUser: {
       enabled: true,
     },
+    additionalFields: {
+      isPremium: { type: "boolean", input: false, defaultValue: false },
+      stripeCustomerId: { type: "string", input: false, required: false },
+    },
   },
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
