@@ -11,10 +11,12 @@ Simulador completo de carrera futbolística estilo FIFA Career Mode combinado co
 | Capa | Tecnología | Coste |
 |---|---|---|
 | **Frontend/Backend** | Next.js 15 + TypeScript | Gratis |
-| **Estilos** | Tailwind CSS + Framer Motion | Gratis |
+| **Estilos** | Tailwind CSS | Gratis |
 | **Autenticación** | Better Auth | Gratis |
 | **Base de datos** | PostgreSQL en Neon (free tier) | Gratis |
 | **ORM** | Drizzle ORM | Gratis |
+| **3D** | react-three-fiber / three.js | Gratis |
+| **Loaders narrativos** | Remotion | Gratis |
 | **IA narrativa** | Google Gemini Flash (free tier) | Gratis |
 | **Deploy** | Vercel (hobby plan) | Gratis |
 
@@ -24,74 +26,87 @@ Simulador completo de carrera futbolística estilo FIFA Career Mode combinado co
 
 ## Decisiones de Arquitectura
 
-- **Migración de Vite a Next.js**: Necesario para Better Auth + Vercel deployment limpio. El engine actual (`engine/`) se reutiliza íntegro.
-- **Multijugador asíncrono** (no tiempo real): Leaderboards, mercado de fichajes entre usuarios, feed global. El multijugador en tiempo real queda fuera de scope por complejidad de infraestructura.
+- **Next.js + Drizzle + Neon + Better Auth**: ya migrado, es la base actual del proyecto.
+- **Multijugador asíncrono** (no tiempo real): Leaderboards, mercado de fichajes entre usuarios, feed global.
 - **Narrativa pregenerada** como base + Gemini Flash como complemento opcional para variedad dinámica.
-- **Local primero, deploy después**: Desarrollo completo en local, despliegue a Vercel cuando cada fase esté estable.
 
 ---
 
-## Roadmap por Fases
+## Estado Actual (actualizado)
 
-### Fase 1 — Fundación (Base técnica) ✅ EN CURSO
-- [ ] Migrar proyecto a Next.js 15
-- [ ] Configurar Better Auth (registro, login, sesiones, OAuth opcional)
-- [ ] Configurar Drizzle ORM + Neon PostgreSQL
-- [ ] Schema de datos: usuarios, jugadores, carreras, temporadas, historial, estadísticas
-- [ ] Design system base: paleta arcade/moderna, tipografía, componentes UI reutilizables
-- [ ] Layout principal: navbar, sidebar, dashboard de jugador
+El proyecto está muy por delante de lo que reflejaba este documento anteriormente. Fases 1 y 2 completas; Fase 3 y 4 parcialmente implementadas.
 
-### Fase 2 — Core Gameplay (El juego en sí)
-- [ ] Pantalla de creación de jugador (nombre, posición, atributos iniciales, país)
-- [ ] Sistema de dados visual (animación de lanzamiento + resultado)
-- [ ] Sistema de decisiones con cartas visuales (dentro y fuera del partido)
-- [ ] Rediseño completo del simulador de partidos: narrativa por turnos con visuales
-- [ ] Panel de estadísticas del jugador con gráficas (Chart.js o Recharts)
-- [ ] Sistema de desarrollo de habilidades (XP, niveles, árbol de habilidades)
+### Fase 1 — Fundación ✅ COMPLETA
+- [x] Next.js 15 + TypeScript
+- [x] Better Auth (registro, login, sesiones, ajustes de cuenta)
+- [x] Drizzle ORM + Neon PostgreSQL
+- [x] Schema: user, player, career, seasonHistory, transferListing, transferOffer, activityLog
+- [x] Layout principal y dashboard de jugador
 
-### Fase 3 — Modo Carrera Completo
-- [ ] Calendario de temporada visual con fixtures
-- [ ] Sistema de transferencias: ofertas entrantes/salientes, negociaciones, cláusulas
-- [ ] Selección nacional: convocatorias, torneos internacionales (Eurocopa, Mundial)
-- [ ] Banco de eventos narrativos (objetivo: 100+ eventos únicos)
-  - Prensa y ruedas de prensa
-  - Lesiones con recuperación progresiva
-  - Conflictos internos (entrenador, compañeros)
-  - Patrocinadores y vida personal
-  - Ofertas de renovación y rumores de mercado
-- [ ] Sistema de galardones: Balón de Oro, MVP, Bota de Oro, etc.
-- [ ] Ascensos y descensos entre ligas (pirámide de ligas por país)
-- [ ] Sistema de reputación y popularidad (local → nacional → mundial)
+### Fase 2 — Core Gameplay ✅ COMPLETA
+- [x] Creación de jugador (`/create-player`)
+- [x] Motor de partidos interactivo (`src/engine/match-interactive.ts`, `match.ts`)
+- [x] Sistema de decisiones (`src/engine/decision.ts`)
+- [x] Sistema de eventos de carrera con traits/rasgos (`career-events.ts`, `events.ts`)
+- [x] Escena 3D del partido (campo, jugador animado — react-three-fiber)
+- [x] Dado 3D (`Dice3D`)
 
-### Fase 4 — Multijugador Asíncrono
-- [ ] Leaderboards globales (goles, títulos, valoración media, carrera más larga)
-- [ ] Mercado de transferencias entre usuarios reales
-- [ ] Perfil público de jugador (compartible)
-- [ ] Feed global de noticias ("MallenK18 fichó por el Real Madrid por 80M")
-- [ ] Sistema de rivalidades y comparativas entre jugadores
+### Fase 3 — Modo Carrera Completo 🟡 EN CURSO
+- [x] Sistema de temporadas (init/event/end) — `/season`, API `season/*`
+- [x] Sistema de transferencias con ofertas y negociación — `/mercado`, `/transfer`, API `market/*`, `transfer/*`
+- [x] Banco de eventos narrativos con traits (rasgos dormidos, polivalencia, físico excepcional, etc.)
+- [x] Narrativa IA vía Gemini (`api/ai/narrative`) con loaders Remotion contextuales
+- [x] Sistema de sanciones (`season/resolve-sancion`)
+- [ ] **Selección nacional**: convocatorias, torneos internacionales (Eurocopa, Mundial) — no iniciado
+- [x] **Sistema de galardones**: Balón de Oro/MVP/Bota de Oro/campeonatos ya se calculaban cada temporada (`calcularPremios` en `api/season/end`) y se guardaban en `historialTemporadas`, pero nunca se mostraban — añadida vitrina de trofeos en `/dashboard` que lista todos los premios ganados por temporada. Pendiente: un "Balón de Oro" global cruzando jugadores de todos los usuarios (requiere lógica de comparación asíncrona entre carreras).
+- [ ] Ascensos y descensos entre ligas (pirámide de ligas por país) — no confirmado en el engine actual
+- [ ] Sistema de reputación/popularidad (local → nacional → mundial) — no confirmado
 
-### Fase 5 — Contenido y Pulido Final
-- [ ] Integración Gemini Flash para narraciones dinámicas opcionales (free tier)
-- [ ] Animaciones de partidos: goles, celebraciones, tarjetas
-- [ ] Efectos de sonido y música de fondo (opcional, assets gratuitos)
-- [ ] PWA: instalable en móvil
+### Fase 4 — Multijugador Asíncrono 🟡 EN CURSO
+- [x] Leaderboard global (`/leaderboard`, API `leaderboard`)
+- [x] Mercado de fichajes entre usuarios reales
+- [x] Feed global de actividad (`/feed`, `activityLog`)
+- [ ] Perfil público de jugador compartible
+- [ ] Rivalidades y comparativas directas entre jugadores
+
+### Fase 5 — Contenido y Pulido Final ⬜ NO INICIADA
+- [x] Integración Gemini Flash (ya en uso, no solo pendiente)
+- [ ] Animaciones de partidos: goles, celebraciones, tarjetas (más allá del engine textual actual)
+- [ ] Efectos de sonido y música de fondo
+- [ ] PWA instalable en móvil
 - [ ] Optimización de rendimiento y SEO
-- [ ] Testing automatizado (Vitest + Playwright)
+- [x] Vitest configurado (`pnpm test`) con primeros tests sobre funciones puras (`src/lib/world.ts`: ascenso/descenso, puntos de liga; `src/engine/decision.ts`: motor de resolución de decisiones). Pendiente ampliar cobertura (career.ts, competition.ts, match-interactive.ts) y añadir Playwright para flujos end-to-end.
+- [ ] Perfil público compartible + Open Graph
 
 ---
 
-## Modelo de Datos (Esquema inicial)
+## Modelo de Datos (actual, `src/lib/schema.ts`)
 
 ```
-users           → id, email, username, avatar, created_at
-players         → id, user_id, name, position, nationality, age, attributes, created_at
-careers         → id, player_id, current_club, current_league, season, status
-seasons         → id, career_id, year, club, stats_aggregated, trophies
-matches         → id, season_id, opponent, result, player_stats, decisions_log
-events          → id, career_id, type, description, outcome, date
-transfers       → id, player_id, from_club, to_club, fee, date
-awards          → id, player_id, type, season, description
+user, session, account, verification   → Better Auth
+player                                  → datos del futbolista
+career                                  → carrera activa del jugador
+season_history                          → historial de temporadas
+transfer_listing / transfer_offer       → mercado de fichajes
+activity_log                            → feed global
 ```
+
+Pendiente de añadir cuando se aborden las features correspondientes:
+```
+national_call_up   → convocatorias de selección
+tournament          → torneos internacionales
+award                → galardones (Balón de Oro, MVP, Bota de Oro...)
+```
+
+---
+
+## Próximos pasos (por prioridad sugerida)
+
+1. **Sistema de galardones** — cierre natural de cada temporada, reutiliza `seasonHistory` y `activityLog` ya existentes. Bajo esfuerzo, alto impacto narrativo.
+2. **Selección nacional / torneos internacionales** — mayor esfuerzo (nuevo ciclo de temporada paralelo), pero es contenido central del roadmap original.
+3. **Perfil público compartible** — aprovecha el mercado/leaderboard ya sociales.
+4. **Testing automatizado** — para poder seguir añadiendo features sin regresiones (no hay tests hoy).
+5. **PWA + pulido visual/sonido** — última fase, cuando el contenido esté cerrado.
 
 ---
 
@@ -101,13 +116,5 @@ awards          → id, player_id, type, season, description
 |---|---|---|
 | **Neon** | Base de datos PostgreSQL | neon.tech |
 | **Google AI Studio** | API key de Gemini Flash | aistudio.google.com |
-| **Vercel** | Deploy (más adelante) | vercel.com |
+| **Vercel** | Deploy | vercel.com |
 | **GitHub** | Repositorio remoto | github.com |
-
----
-
-## Estado Actual
-
-- **Fase activa:** Fase 1
-- **Último avance:** Plan definido, inicio de migración a Next.js
-- **Prioridad inmediata:** Migración de Vite → Next.js + setup de auth y base de datos

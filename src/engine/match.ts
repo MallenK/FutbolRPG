@@ -132,7 +132,13 @@ export const simulateMatchResultOnly = (rivalDificultad: 'Baja'|'Media'|'Alta'):
 
 export const simulateMatch = async (player: Player, logger: Logger): Promise<Player> => {
   const initialPlayerState = JSON.parse(JSON.stringify(player));
-  let currentPlayer = { ...player };
+  let currentPlayer = {
+    ...player,
+    carrera: {
+      ...player.carrera,
+      estadisticasTemporada: { ...player.carrera.estadisticasTemporada },
+    },
+  };
   let marcador = { local: 2, visitante: 1 };
   let statsPartido: MatchStats = {
     minutos: 90, goles: 0, asistencias: 0, tiros: 0, pasesCompletados: 0, robos: 0, valoracion: 6.0

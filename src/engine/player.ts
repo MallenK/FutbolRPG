@@ -74,11 +74,15 @@ export const updatePlayerStats = (player: Player, effects: Partial<Player['estad
     estado: {
       ...player.estado,
       fatiga: Math.min(100, Math.max(0, player.estado.fatiga + (effects.fatiga || 0))),
+      forma: Math.min(100, Math.max(0, player.estado.forma + (effects.forma || 0))),
       moral: Math.min(100, Math.max(0, player.estado.moral + (effects.moral || 0))),
+      riesgoLesion: Math.min(100, Math.max(0, player.estado.riesgoLesion + (effects.riesgoLesion || 0))),
     },
     confianza: {
       ...player.confianza,
       entrenador: Math.min(100, Math.max(0, player.confianza.entrenador + (effects.entrenador || 0))),
+      vestuario: Math.min(100, Math.max(0, player.confianza.vestuario + (effects.vestuario || 0))),
+      reputacion: Math.min(100, Math.max(0, player.confianza.reputacion + (effects.reputacion || 0))),
     }
   };
 };

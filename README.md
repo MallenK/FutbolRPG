@@ -1,20 +1,47 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# FutbolRPG
 
-# Run and deploy your AI Studio app
+Simulador de carrera futbolística estilo FIFA Career Mode combinado con un RPG narrativo por decisiones y dados. El jugador crea un futbolista, gestiona su carrera a lo largo de temporadas (partidos, mercado de fichajes, eventos narrativos) y compite de forma asíncrona con otros usuarios (leaderboard, feed, mercado).
 
-This contains everything you need to run your app locally.
+## Stack
 
-View your app in AI Studio: https://ai.studio/apps/drive/1h0YrNM6G-VmWP2A0oTLsCxSoMNSCgjkV
+- **Next.js 15** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS**
+- **Drizzle ORM** sobre **PostgreSQL (Neon)**
+- **Better Auth** (registro, login, sesiones)
+- **react-three-fiber / three.js** — escenas 3D (campo, jugador, trofeo, dado)
+- **Remotion** — loaders narrativos animados
+- **Google Gemini** — narrativa IA complementaria
+
+## Estructura
+
+```
+src/app/            rutas (App Router): dashboard, create-player, match, season, mercado, transfer, leaderboard, feed, settings, api/*
+src/engine/         motor de juego: partidos, eventos de temporada, competiciones, decisiones, traits
+src/lib/            schema de Drizzle, auth, utilidades
+src/components/     componentes UI y escenas 3D
+remotion/           composiciones de Remotion (loaders)
+```
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Requisitos:** Node.js, pnpm
 
+1. Instalar dependencias:
+   `pnpm install`
+2. Configurar variables en `.env.local` (ver `.env.local.example` o pedir al equipo): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_BETTER_AUTH_URL`, `GEMINI_API_KEY`.
+3. Aplicar el schema a la base de datos:
+   `pnpm db:push`
+4. Arrancar el entorno de desarrollo:
+   `pnpm dev`
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+App disponible en http://localhost:3000
+
+## Otros comandos
+
+- `pnpm test` — ejecuta los tests (Vitest)
+- `pnpm test:watch` — tests en modo watch
+- `pnpm db:studio` — explorador visual de la base de datos (Drizzle Studio)
+- `pnpm db:generate` / `pnpm db:migrate` — migraciones
+- `pnpm remotion` — abrir Remotion Studio para editar los loaders
+
+Ver [ROADMAP.md](ROADMAP.md) para el estado y plan de desarrollo.
