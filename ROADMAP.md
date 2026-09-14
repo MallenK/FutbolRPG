@@ -75,7 +75,8 @@ El proyecto está muy por delante de lo que reflejaba este documento anteriormen
 - [x] Efectos de sonido (`src/lib/sound.ts`: dados, resultados, goles, trofeos) — música de fondo sigue sin implementar
 - [x] PWA instalable en móvil (`public/manifest.json`, `public/sw.js`, `RegisterServiceWorker.tsx`, iconos dinámicos)
 - [ ] Optimización de rendimiento y SEO
-- [x] Vitest configurado (`pnpm test`) con cobertura de `world.ts`, `player-config.ts`, `career-events.ts`, `player.ts`, `decision.ts`, `match-interactive.ts`, `quick-sim.ts`, `streak.ts`, `premium.ts` (129 tests). Pendiente añadir Playwright para flujos end-to-end.
+- [x] Vitest configurado (`pnpm test`) con cobertura de `world.ts`, `player-config.ts`, `career-events.ts`, `player.ts`, `decision.ts`, `match-interactive.ts`, `quick-sim.ts`, `streak.ts`, `premium.ts` (136 tests).
+- [x] Playwright configurado (`pnpm test:e2e`) para flujos end-to-end reales: `e2e/career-lifecycle.spec.ts` (registro → crear personaje → simular una temporada → gloria → borrar cuenta) y `e2e/leaderboard.spec.ts` (pestañas del ranking). Corre contra un `next dev` propio en el puerto 3100 y la base de datos real; las cuentas de prueba se crean y se borran solas.
 
 ---
 
@@ -120,8 +121,8 @@ Selección Nacional, torneos internacionales y galardones ya están implementado
 Fases 1, 2 y 4 completas; de la Fase 3 solo queda reputación/popularidad (sin diseñar). Lo que sigue, sin orden de fase fijo:
 
 1. ~~**Score de "gloria" unificado**~~ ✅ Hecho (Ronda 4, `informe-fallos.md`) — `calcularGloria`/`calcularGloriaTemporada` en `world.ts`, ponderando títulos por tamaño de club (división), ascensos, posición final y prestigio de selección. Es ahora la pestaña por defecto de `/leaderboard`, se muestra en `/comparar/[id]` y como badge en `/dashboard`.
-2. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
-3. **Testing automatizado end-to-end** — Vitest cubre bien la lógica pura; falta Playwright para flujos completos (crear personaje → temporada → partido → fin de temporada).
+2. ~~**Testing automatizado end-to-end**~~ ✅ Hecho (Ronda 5, `informe-fallos.md`) — Playwright configurado, 2 specs cubriendo el ciclo de vida completo de una cuenta y el ranking.
+3. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
 4. **Optimización de rendimiento y SEO.**
 5. **Música de fondo** — los efectos de sonido puntuales ya existen, falta el ambiente continuo.
 

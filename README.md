@@ -38,8 +38,10 @@ App disponible en http://localhost:3000
 
 ## Otros comandos
 
-- `pnpm test` — ejecuta los tests (Vitest)
-- `pnpm test:watch` — tests en modo watch
+- `pnpm test` — ejecuta los tests unitarios (Vitest)
+- `pnpm test:watch` — tests unitarios en modo watch
+- `pnpm test:e2e` — tests end-to-end (Playwright): levanta su propio `next dev` en el puerto 3100 y corre flujos completos reales (registro → crear personaje → jugar/simular una temporada → borrar cuenta) contra la base de datos de `DATABASE_URL`. Las cuentas de prueba se crean y se borran solas al final de cada test.
+- `pnpm test:e2e:ui` — lo mismo, con la UI interactiva de Playwright (útil para depurar un test que falla)
 - `pnpm db:studio` — explorador visual de la base de datos (Drizzle Studio)
 - `pnpm db:generate` / `pnpm db:migrate` — migraciones
 - `pnpm remotion` — abrir Remotion Studio para editar los loaders
