@@ -4,14 +4,14 @@ import { player } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
-import { type CareerEvent, type OpcionEvento, getEventById } from "@/engine/career-events"
+import { type CareerEvent, type OpcionEvento, getEventById, pickAutoOpcion } from "@/engine/career-events"
 import { getDivisionInfo } from "@/lib/world"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { opcionId } = await req.json()
+  const { opcionId, auto } = await req.json() as { opcionId?: string; auto?: boolean }
 
   const found = await getPlayerByUserId(session.user.id)
   if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
@@ -22,7 +22,12 @@ export async function POST(req: NextRequest) {
 
   if (!evento) return NextResponse.json({ error: "No pending event" }, { status: 400 })
 
-  const opcion = evento.opciones.find((o: OpcionEvento) => o.id === opcionId)
+  const opcion = auto
+    ? pickAutoOpcion(evento, (() => {
+        const attrs = found.attributes as Record<string, Record<string, number>>
+        return { ...attrs?.tecnicos, ...attrs?.fisicos, ...attrs?.tacticos, ...attrs?.mentales }
+      })())
+    : evento.opciones.find((o: OpcionEvento) => o.id === opcionId)
   if (!opcion) return NextResponse.json({ error: "Invalid option" }, { status: 400 })
 
   const fx = opcion.efectos

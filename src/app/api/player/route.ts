@@ -25,7 +25,10 @@ type RpgFields = {
   posicionesSecundarias?: string[]
 }
 
-function buildInitialState(division: Division, rpg?: RpgFields) {
+export type ModoJuego = "completo" | "decisivos" | "simulado"
+const MODOS_JUEGO: ModoJuego[] = ["completo", "decisivos", "simulado"]
+
+function buildInitialState(division: Division, rpg?: RpgFields, modoJuego?: string) {
   const divInfo = getDivisionInfo(division)
   const club = rpg?.clubElegido && divInfo.clubes.includes(rpg.clubElegido)
     ? rpg.clubElegido
@@ -53,6 +56,7 @@ function buildInitialState(division: Division, rpg?: RpgFields) {
       club,
       liga: divInfo.nombre,
       divisionActual: division,
+      modoJuego: MODOS_JUEGO.includes(modoJuego as ModoJuego) ? modoJuego : "completo",
       rol: "Rotación",
       temporada: 1,
       reputacion: 10,
@@ -109,14 +113,14 @@ export async function POST(req: NextRequest) {
   if (error) return error
 
   const body = await req.json()
-  const { name, position, nationality, attributes, divisionInicial, rpg, state } = body
+  const { name, position, nationality, attributes, divisionInicial, rpg, state, modoJuego } = body
 
   if (!name || !position || !attributes) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 })
   }
 
   const division = (Math.max(1, Math.min(5, divisionInicial ?? 3))) as Division
-  const initialState = buildInitialState(division, rpg)
+  const initialState = buildInitialState(division, rpg, modoJuego)
   const divInfo = getDivisionInfo(division)
   const age = rpg?.age ?? 18
 

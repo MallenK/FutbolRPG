@@ -34,6 +34,7 @@ type PlayerData = {
     preferencias?: Preferencias
     carrera: {
       club: string
+      modoJuego?: "completo" | "decisivos" | "simulado"
       estadisticasTemporada?: { partidosJugados: number; goles: number; asistencias: number }
       estadisticasCarrera?: { partidosJugados: number; goles: number; asistencias: number }
       historialTemporadas?: SeasonHistoryEntry[]
@@ -112,6 +113,8 @@ export default function SettingsPage() {
   const [ocultoEnActividad, setOcultoEnActividad] = useState(false)
   const [perfilPublicoOculto, setPerfilPublicoOculto] = useState(false)
   const [notificacionesOfertasDesactivadas, setNotificacionesOfertasDesactivadas] = useState(false)
+  const [modoJuego, setModoJuegoState] = useState<"completo" | "decisivos" | "simulado">("completo")
+  const [modoJuegoMsg, setModoJuegoMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -135,6 +138,7 @@ export default function SettingsPage() {
           setOcultoEnActividad(prefs.ocultoEnActividad ?? false)
           setPerfilPublicoOculto(prefs.perfilPublicoOculto ?? false)
           setNotificacionesOfertasDesactivadas(prefs.notificacionesOfertasDesactivadas ?? false)
+          setModoJuegoState(p.state.carrera.modoJuego ?? "completo")
         }
         setLoading(false)
       })
@@ -220,6 +224,17 @@ export default function SettingsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preferencias: patch }),
     }).catch(() => {})
+  }
+
+  function handleChangeModoJuego(nuevo: "completo" | "decisivos" | "simulado") {
+    setModoJuegoState(nuevo)
+    setModoJuegoMsg("Guardado ✓")
+    fetch("/api/player/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modoJuego: nuevo }),
+    }).catch(() => {})
+    setTimeout(() => setModoJuegoMsg(null), 1500)
   }
 
   function handleToggleReducedMotion(value: boolean) {
@@ -461,6 +476,35 @@ export default function SettingsPage() {
               <button onClick={handleExport} className={secondaryBtn}>
                 Exportar mis datos (JSON)
               </button>
+            </section>
+
+            {/* Modo de juego */}
+            <section className="bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-lg font-bold">Modo de juego</h2>
+                {modoJuegoMsg && <span className="text-green-400 text-xs font-semibold">{modoJuegoMsg}</span>}
+              </div>
+              <p className="text-gray-500 text-sm mb-4">Controla cuánto juegas tú mismo y cuánto se simula automáticamente.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {([
+                  { id: "completo" as const, label: "Completo", description: "Juegas todos los partidos tú mismo." },
+                  { id: "decisivos" as const, label: "Decisivos", description: "Eliminatorias, selección y tramo final de liga; el resto se simula." },
+                  { id: "simulado" as const, label: "Simulado", description: "Toda la temporada se resuelve automáticamente." },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleChangeModoJuego(m.id)}
+                    className={`text-left p-3 rounded-xl border transition-colors ${
+                      modoJuego === m.id
+                        ? "bg-green-500/10 border-green-500 text-white"
+                        : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <p className="font-bold text-sm mb-1">{m.label}</p>
+                    <p className="text-xs text-gray-500">{m.description}</p>
+                  </button>
+                ))}
+              </div>
             </section>
 
             {/* 3. Preferencias */}

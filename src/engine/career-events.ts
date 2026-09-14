@@ -2408,3 +2408,13 @@ export const pickRandomEvent = (
 
 export const getEventById = (id: string): CareerEvent | undefined =>
   CAREER_EVENTS.find((e) => e.id === id)
+
+// Elige una opción sin intervención del usuario, para el modo de juego
+// "simulado" (ver season/page.tsx): prefiere la opción cuyo requiereStat
+// cumple el jugador (una elección "razonable"); si ninguna aplica, al azar.
+export const pickAutoOpcion = (
+  evento: CareerEvent,
+  flatStats: Record<string, number>,
+): OpcionEvento =>
+  evento.opciones.find((o) => o.requiereStat && (flatStats[o.requiereStat.stat] ?? 0) >= o.requiereStat.minValue)
+    ?? evento.opciones[Math.floor(Math.random() * evento.opciones.length)]

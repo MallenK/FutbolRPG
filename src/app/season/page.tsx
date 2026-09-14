@@ -45,6 +45,7 @@ type PlayerState = {
     temporada: number
     jornadaActual: number
     reputacion: number
+    modoJuego?: "completo" | "decisivos" | "simulado"
     fixtures: Fixture[]
     copa?: CopaState
     europa?: EuropaState
@@ -125,6 +126,9 @@ export default function SeasonPage() {
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
   const [jugarComoSecundaria, setJugarComoSecundaria] = useState(false)
   const [summaryLinkCopied, setSummaryLinkCopied] = useState(false)
+  const [simulatingMatch, setSimulatingMatch] = useState(false)
+  const [autoSeasonRunning, setAutoSeasonRunning] = useState(false)
+  const [autoSeasonStep, setAutoSeasonStep] = useState(0)
 
   useEffect(() => {
     if (!session) return
@@ -163,6 +167,7 @@ export default function SeasonPage() {
         temporada: carrera.temporada ?? 1,
         jornadaActual,
         reputacion: carrera.reputacion ?? 10,
+        modoJuego: (carrera.modoJuego as "completo" | "decisivos" | "simulado" | undefined) ?? "completo",
         fixtures: carrera.fixtures ?? [],
         copa: carrera.copa ?? undefined,
         europa: carrera.europa ?? undefined,
@@ -223,6 +228,45 @@ export default function SeasonPage() {
     await fetch("/api/season/resolve-sancion", { method: "POST" })
     await loadPlayer()
     setResolvingSancion(false)
+  }
+
+  const handleSimularPartido = async () => {
+    if (simulatingMatch) return
+    setSimulatingMatch(true)
+    await fetch("/api/match/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: "liga" }),
+    })
+    await loadPlayer()
+    setSimulatingMatch(false)
+  }
+
+  // Modo de juego "simulado": resuelve toda la temporada de golpe llamando
+  // en bucle a /api/season/auto-advance (un paso -- evento, partido de
+  // selección/copa/europa/liga -- por llamada) hasta que no quede nada
+  // pendiente, y entonces cierra la temporada igual que si un humano hubiera
+  // pulsado "Terminar temporada".
+  const handleSimularTemporadaCompleta = async () => {
+    if (autoSeasonRunning) return
+    setAutoSeasonRunning(true)
+    setAutoSeasonStep(0)
+    try {
+      // Límite de seguridad, no un valor esperado: 16 jornadas de liga + hasta 5
+      // de copa + hasta 10 de europa + hasta 9 de selección + hasta 6 eventos
+      // por jornada en ~55% de ellas (ver eventosPendientes en match-save.ts)
+      // puede superar fácilmente el centenar de pasos en una temporada cargada
+      // (probado en la práctica: ~62 pasos en un caso típico).
+      for (let i = 0; i < 250; i++) {
+        const res = await fetch("/api/season/auto-advance", { method: "POST" })
+        const data = await res.json()
+        setAutoSeasonStep((n) => n + 1)
+        if (data.done) break
+      }
+      await handleEndSeason()
+    } finally {
+      setAutoSeasonRunning(false)
+    }
   }
 
   const handleResolveEvent = async (opcionId: string) => {
@@ -402,11 +446,31 @@ export default function SeasonPage() {
           </button>
         </div>
 
+        {/* Modo de juego "simulado": sustituye toda la UI de partido a
+            partido/pestañas mientras la temporada esté en curso por un único
+            botón que resuelve todo (eventos + partidos de cualquier
+            competición) automáticamente y cierra la temporada al terminar. */}
+        {carrera.modoJuego === "simulado" && phase !== "no_season" && phase !== "season_over" && phase !== "season_summary" && (
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4 text-center">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">Modo simulado</p>
+            <p className="text-gray-400 text-sm">
+              Se resolverán automáticamente todos los partidos y eventos que queden de esta temporada.
+            </p>
+            <button
+              onClick={handleSimularTemporadaCompleta}
+              disabled={autoSeasonRunning}
+              className="w-full py-3 bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold rounded-xl transition-colors"
+            >
+              {autoSeasonRunning ? `Simulando... (${autoSeasonStep})` : "⚡ Simular temporada completa →"}
+            </button>
+          </div>
+        )}
+
         {/* Tab switcher — oculto al terminar la temporada: el resumen y el botón
             para empezar la siguiente son transversales a cualquier competición,
             así que no tiene sentido dejar que una pestaña los tape (ver C1 en
             informe-fallos.md) */}
-        {phase !== "no_season" && phase !== "season_over" && phase !== "season_summary" && (showCopa || showEuropa || showSeleccion) && (
+        {carrera.modoJuego !== "simulado" && phase !== "no_season" && phase !== "season_over" && phase !== "season_summary" && (showCopa || showEuropa || showSeleccion) && (
           <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setTab("liga")}
@@ -519,7 +583,7 @@ export default function SeasonPage() {
             )}
 
             {/* Event */}
-            {phase === "event" && carrera.eventoActual && !eventNarrativo && (
+            {carrera.modoJuego !== "simulado" && phase === "event" && carrera.eventoActual && !eventNarrativo && (
               <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-5">
                 <div className="flex items-center gap-3">
                   <span className={`text-xs font-bold px-2 py-1 rounded-full border ${TIPO_COLORS[carrera.eventoActual.tipo]}`}>
@@ -549,7 +613,7 @@ export default function SeasonPage() {
             )}
 
             {/* Event result */}
-            {phase === "event" && eventNarrativo && (
+            {carrera.modoJuego !== "simulado" && phase === "event" && eventNarrativo && (
               <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 text-center space-y-5">
                 <p className="text-gray-300 leading-relaxed">{eventNarrativo}</p>
                 {geminiEventLoading && <VideoLoader variant="press" label="Última hora..." size={88} />}
@@ -570,7 +634,7 @@ export default function SeasonPage() {
             )}
 
             {/* Parón internacional */}
-            {phase === "paron" && seleccion?.paron && (
+            {carrera.modoJuego !== "simulado" && phase === "paron" && seleccion?.paron && (
               <div className="bg-gray-900 rounded-2xl border border-red-500/30 p-6 space-y-4">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">🇪🇸</span>
@@ -661,10 +725,14 @@ export default function SeasonPage() {
             )}
 
             {/* Next match */}
-            {phase === "next_match" && (() => {
+            {carrera.modoJuego !== "simulado" && phase === "next_match" && (() => {
               const nextFixture = carrera.fixtures.find((f) => f.jornada === carrera.jornadaActual)
               if (!nextFixture) return null
               const partidosSancion = carrera.sancion?.partidosRestantes ?? 0
+              // Modo "decisivos": últimas 6 jornadas de liga (ascenso/descenso en juego)
+              // se juegan siempre a mano; el resto se puede simular de un click.
+              const esJornadaDecisiva = carrera.jornadaActual > 10
+              const puedeSimular = carrera.modoJuego === "decisivos" && !esJornadaDecisiva
               return (
                 <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
                   <p className="text-xs text-gray-500 uppercase tracking-wider">Próximo partido · Jornada {nextFixture.jornada}</p>
@@ -715,10 +783,21 @@ export default function SeasonPage() {
                       )}
                       <button
                         onClick={() => router.push(jugarComoSecundaria ? "/match?posicion=secundaria" : "/match")}
-                        className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
+                        className={`w-full py-3 font-bold rounded-xl transition-colors ${
+                          puedeSimular ? "bg-gray-800 hover:bg-gray-700 text-white" : "bg-green-500 hover:bg-green-400 text-black"
+                        }`}
                       >
                         Jugar partido →
                       </button>
+                      {puedeSimular && (
+                        <button
+                          onClick={handleSimularPartido}
+                          disabled={simulatingMatch}
+                          className="w-full py-3 bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold rounded-xl transition-colors"
+                        >
+                          {simulatingMatch ? "Simulando..." : "⚡ Simular resultado →"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

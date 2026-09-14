@@ -5,6 +5,8 @@ import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 
+const MODOS_JUEGO = ["completo", "decisivos", "simulado"]
+
 type PreferenciasPatch = Partial<{
   reducirMovimiento: boolean
   ocultarAvisoMercado: boolean
@@ -19,10 +21,11 @@ export async function PATCH(req: NextRequest) {
   if (error) return error
 
   const body = await req.json()
-  const { apodo, dorsal, preferencias } = body as {
+  const { apodo, dorsal, preferencias, modoJuego } = body as {
     apodo?: string
     dorsal?: number
     preferencias?: PreferenciasPatch
+    modoJuego?: string
   }
 
   const existing = await getPlayerByUserId(session.user.id)
@@ -43,6 +46,9 @@ export async function PATCH(req: NextRequest) {
       ...(state.preferencias as Record<string, unknown> | undefined),
       ...preferencias,
     }
+  }
+  if (modoJuego !== undefined && MODOS_JUEGO.includes(modoJuego)) {
+    state.carrera = { ...(state.carrera as Record<string, unknown>), modoJuego }
   }
 
   await db.update(player)
