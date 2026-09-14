@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
 import { mercadoLocked } from "@/lib/premium"
+import { getUserContactByUserId } from "@/lib/players"
+import { sendOfferReceivedEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
@@ -60,6 +62,17 @@ export async function POST(req: NextRequest) {
     fromClub,
     status: "pending",
   })
+
+  // Best-effort: si el email falla no debe tumbar la oferta, que ya está guardada.
+  try {
+    const owner = await getUserContactByUserId(listing[0].userId)
+    if (owner && !owner.notificacionesOfertasDesactivadas) {
+      const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/mercado`
+      await sendOfferReceivedEmail(owner.email, owner.name, fromClub, url)
+    }
+  } catch (err) {
+    console.error("[market/offer] fallo al enviar email de notificación", err)
+  }
 
   return NextResponse.json({ success: true })
 }

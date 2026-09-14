@@ -19,6 +19,7 @@ type Preferencias = {
   ocultoEnRanking?: boolean
   ocultoEnActividad?: boolean
   perfilPublicoOculto?: boolean
+  notificacionesOfertasDesactivadas?: boolean
 }
 
 type PlayerData = {
@@ -110,6 +111,7 @@ export default function SettingsPage() {
   const [ocultoEnRanking, setOcultoEnRanking] = useState(false)
   const [ocultoEnActividad, setOcultoEnActividad] = useState(false)
   const [perfilPublicoOculto, setPerfilPublicoOculto] = useState(false)
+  const [notificacionesOfertasDesactivadas, setNotificacionesOfertasDesactivadas] = useState(false)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -132,6 +134,7 @@ export default function SettingsPage() {
           setOcultoEnRanking(prefs.ocultoEnRanking ?? false)
           setOcultoEnActividad(prefs.ocultoEnActividad ?? false)
           setPerfilPublicoOculto(prefs.perfilPublicoOculto ?? false)
+          setNotificacionesOfertasDesactivadas(prefs.notificacionesOfertasDesactivadas ?? false)
         }
         setLoading(false)
       })
@@ -476,6 +479,15 @@ export default function SettingsPage() {
                 onChange={(value) => {
                   setOcultarAvisoMercado(value)
                   savePreference({ ocultarAvisoMercado: value })
+                }}
+              />
+              <ToggleRow
+                label="No enviarme emails de mercado"
+                description="Desactiva los avisos por email cuando recibes, aceptas o rechazas una oferta de fichaje."
+                checked={notificacionesOfertasDesactivadas}
+                onChange={(value) => {
+                  setNotificacionesOfertasDesactivadas(value)
+                  savePreference({ notificacionesOfertasDesactivadas: value })
                 }}
               />
             </section>

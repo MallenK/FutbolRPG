@@ -54,3 +54,33 @@ export async function sendResetPasswordEmail(to: string, name: string, url: stri
   )
   await send(to, "Restablece tu contraseña de FutbolRPG", html)
 }
+
+export async function sendOfferReceivedEmail(to: string, name: string, offererClub: string, url: string) {
+  const html = wrapper(
+    "Nueva oferta de fichaje 📩",
+    `Hola ${name}, <strong>${offererClub}</strong> ha hecho una oferta por tu jugador. Entra al mercado para aceptarla o rechazarla.`,
+    "Ver oferta",
+    url,
+  )
+  await send(to, "Tienes una nueva oferta de fichaje — FutbolRPG", html)
+}
+
+export async function sendOfferAcceptedEmail(to: string, name: string, newClub: string, url: string) {
+  const html = wrapper(
+    "¡Fichaje confirmado! ✅",
+    `Hola ${name}, tu oferta ha sido aceptada. El jugador se une a <strong>${newClub}</strong>.`,
+    "Ver mi equipo",
+    url,
+  )
+  await send(to, "Tu oferta de fichaje ha sido aceptada — FutbolRPG", html)
+}
+
+export async function sendOfferRejectedEmail(to: string, name: string, url: string) {
+  const html = wrapper(
+    "Oferta rechazada",
+    `Hola ${name}, tu oferta de fichaje no ha sido aceptada esta vez. Sigue buscando en el mercado — seguro que encuentras a otro jugador.`,
+    "Volver al mercado",
+    url,
+  )
+  await send(to, "Tu oferta de fichaje ha sido rechazada — FutbolRPG", html)
+}

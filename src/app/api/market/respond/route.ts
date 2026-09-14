@@ -5,6 +5,8 @@ import { eq, and, ne } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
+import { getUserContactByUserId } from "@/lib/players"
+import { sendOfferAcceptedEmail, sendOfferRejectedEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
@@ -42,6 +44,16 @@ export async function POST(req: NextRequest) {
       .update(transferOffer)
       .set({ status: "rejected" })
       .where(eq(transferOffer.id, offerId))
+
+    try {
+      const offerer = await getUserContactByUserId(offer[0].fromUserId)
+      if (offerer && !offerer.notificacionesOfertasDesactivadas) {
+        const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/mercado`
+        await sendOfferRejectedEmail(offerer.email, offerer.name, url)
+      }
+    } catch (err) {
+      console.error("[market/respond] fallo al enviar email de notificación", err)
+    }
 
     return NextResponse.json({ success: true, action: "rejected" })
   }
@@ -93,6 +105,16 @@ export async function POST(req: NextRequest) {
       offeredBy: offer[0].fromPlayerName,
     },
   })
+
+  try {
+    const offerer = await getUserContactByUserId(offer[0].fromUserId)
+    if (offerer && !offerer.notificacionesOfertasDesactivadas) {
+      const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/dashboard`
+      await sendOfferAcceptedEmail(offerer.email, offerer.name, offer[0].fromClub, url)
+    }
+  } catch (err) {
+    console.error("[market/respond] fallo al enviar email de notificación", err)
+  }
 
   return NextResponse.json({
     success: true,
