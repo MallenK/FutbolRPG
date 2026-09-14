@@ -1,6 +1,7 @@
 import { db } from "./db"
 import { player, user } from "./schema"
 import { eq } from "drizzle-orm"
+import { calcularGloria, type SeasonHistoryEntry } from "./world"
 
 export type ComparableStats = {
   playerId: string
@@ -15,6 +16,7 @@ export type ComparableStats = {
   asistenciasTotales: number
   partidosTotales: number
   trofeos: number
+  gloria: number
 }
 
 type PlayerRow = { id: string; name: string; position: string; state: unknown }
@@ -27,7 +29,9 @@ export function getComparableStats(row: PlayerRow): ComparableStats {
   const carrera = (state?.carrera ?? {}) as Record<string, unknown>
   const statsTemporada = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
   const statsCarrera = (carrera?.estadisticasCarrera ?? {}) as Record<string, number>
-  const historial = (carrera?.historialTemporadas ?? []) as { premios: string[] }[]
+  const historial = (carrera?.historialTemporadas ?? []) as SeasonHistoryEntry[]
+  const reputacion = (carrera?.reputacion as number) ?? 0
+  const seleccion = carrera?.seleccion as { capas?: number; golesSeleccion?: number } | undefined
 
   return {
     playerId: row.id,
@@ -36,12 +40,18 @@ export function getComparableStats(row: PlayerRow): ComparableStats {
     position: row.position,
     club: (carrera?.club as string) ?? "—",
     level: (state?.level as number) ?? 1,
-    reputacion: (carrera?.reputacion as number) ?? 0,
+    reputacion,
     temporada: (carrera?.temporada as number) ?? 1,
     golesTotales: (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0),
     asistenciasTotales: (statsCarrera?.asistencias ?? 0) + (statsTemporada?.asistencias ?? 0),
     partidosTotales: (statsCarrera?.partidosJugados ?? 0) + (statsTemporada?.partidosJugados ?? 0),
     trofeos: historial.reduce((n, t) => n + t.premios.length, 0),
+    gloria: calcularGloria({
+      historialTemporadas: historial,
+      reputacion,
+      seleccionCapas: seleccion?.capas ?? 0,
+      seleccionGoles: seleccion?.golesSeleccion ?? 0,
+    }),
   }
 }
 

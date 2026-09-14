@@ -726,3 +726,104 @@ export function advanceEuropaEliminatoria(
     },
   }
 }
+
+// ─── Gloria: score unificado de carrera ────────────────────────────────────────
+//
+// El leaderboard por categorías sueltas (nivel/reputación/temporadas) premia
+// sobre todo *jugar mucho*, no lo que se ha logrado. "Gloria" mide lo segundo:
+// títulos, ascensos y prestigio internacional, ponderados por mérito — un
+// título con un club humilde de Tercera Federación pesa más que el mismo
+// título ya instalado entre los gigantes, porque no es el mismo logro.
+
+// Nombres de premio compartidos entre `calcularPremios` (api/season/end) y el
+// cálculo de gloria de abajo — una sola fuente de verdad para que no puedan
+// desincronizarse los textos.
+export const PREMIOS = {
+  BOTA_ORO_CLUB: "Bota de Oro del Club",
+  MVP_TEMPORADA: "MVP de la Temporada",
+  MEJOR_ONCE: "Mejor Once",
+  MEJOR_ASISTIDOR: "Mejor Asistidor",
+  MEJOR_JUGADOR_COMPLETO: "Mejor Jugador Completo",
+  CAMPEON_COPA: "Campeón de Copa del Rey",
+  CAMPEON_CHAMPIONS: "Campeón de la Champions League",
+  CAMPEON_EUROPA_LEAGUE: "Campeón de la Europa League",
+  CAMPEON_CONFERENCE: "Campeón de la Conference League",
+  CAMPEON_EUROPA_GENERICO: "Campeón de Europa",
+  CAMPEON_EUROCOPA: "Campeón de la Eurocopa",
+  CAMPEON_MUNDIAL: "Campeón del Mundo",
+  CAMPEON_INTERNACIONAL_GENERICO: "Campeón Internacional",
+} as const
+
+// Puntos base por premio — los de selección valen más que los de club porque
+// compiten contra todo el mundo, no contra 9 rivales de la misma división.
+const PREMIO_GLORIA: Record<string, number> = {
+  [PREMIOS.CAMPEON_MUNDIAL]: 150,
+  [PREMIOS.CAMPEON_EUROCOPA]: 100,
+  [PREMIOS.CAMPEON_INTERNACIONAL_GENERICO]: 100,
+  [PREMIOS.CAMPEON_CHAMPIONS]: 100,
+  [PREMIOS.CAMPEON_EUROPA_LEAGUE]: 70,
+  [PREMIOS.CAMPEON_CONFERENCE]: 50,
+  [PREMIOS.CAMPEON_EUROPA_GENERICO]: 70,
+  [PREMIOS.CAMPEON_COPA]: 40,
+  [PREMIOS.MVP_TEMPORADA]: 25,
+  [PREMIOS.BOTA_ORO_CLUB]: 20,
+  [PREMIOS.MEJOR_JUGADOR_COMPLETO]: 18,
+  [PREMIOS.MEJOR_ASISTIDOR]: 15,
+  [PREMIOS.MEJOR_ONCE]: 12,
+}
+const PREMIO_GLORIA_DEFECTO = 10 // por si aparece un premio nuevo sin catalogar aquí
+
+// Los premios de selección no dependen del club con el que juegas, así que no
+// llevan el multiplicador de tamaño de club de abajo.
+const PREMIOS_SELECCION = new Set<string>([
+  PREMIOS.CAMPEON_MUNDIAL, PREMIOS.CAMPEON_EUROCOPA, PREMIOS.CAMPEON_INTERNACIONAL_GENERICO,
+])
+const PREMIOS_CLUB = new Set<string>([
+  PREMIOS.CAMPEON_COPA, PREMIOS.CAMPEON_CHAMPIONS, PREMIOS.CAMPEON_EUROPA_LEAGUE,
+  PREMIOS.CAMPEON_CONFERENCE, PREMIOS.CAMPEON_EUROPA_GENERICO,
+])
+
+// División 1 (Tercera Federación, clubes humildes) → un título ahí vale el
+// doble. División 5 (nivel Champions, los gigantes ya asentados arriba) → sin
+// bonus, es la vara de medir base.
+const MULTIPLICADOR_GLORIA_POR_DIVISION: Record<number, number> = {
+  1: 2.0, 2: 1.6, 3: 1.3, 4: 1.1, 5: 1.0,
+}
+
+function multiplicadorClub(division: number): number {
+  return MULTIPLICADOR_GLORIA_POR_DIVISION[division] ?? 1
+}
+
+export function calcularGloriaTemporada(temporada: SeasonHistoryEntry): number {
+  const mult = multiplicadorClub(temporada.division)
+  let gloria = 0
+
+  for (const premio of temporada.premios) {
+    const base = PREMIO_GLORIA[premio] ?? PREMIO_GLORIA_DEFECTO
+    gloria += PREMIOS_SELECCION.has(premio) ? base : PREMIOS_CLUB.has(premio) ? base * mult : base
+  }
+
+  // Terminar 1º o 2º de la división es un logro en sí mismo aunque hoy no
+  // genere un premio propio en `calcularPremios` (1º ya implica ascenso,
+  // salvo en la división 5, que no tiene una superior).
+  if (temporada.cambioDivision === "ascenso") gloria += 15 * mult
+  if (temporada.posicionFinal === 1) gloria += 20 * mult
+  else if (temporada.posicionFinal === 2) gloria += 8 * mult
+
+  return gloria
+}
+
+export function calcularGloria(input: {
+  historialTemporadas?: SeasonHistoryEntry[]
+  reputacion?: number
+  seleccionCapas?: number
+  seleccionGoles?: number
+}): number {
+  const historial = input.historialTemporadas ?? []
+  const gloriaTemporadas = historial.reduce((acc, t) => acc + calcularGloriaTemporada(t), 0)
+  // Prestigio internacional acumulado y reputación general — pesan poco
+  // frente a los títulos, a propósito: son un empujón, no el motor del score.
+  const gloriaSeleccion = (input.seleccionCapas ?? 0) * 2 + (input.seleccionGoles ?? 0) * 4
+  const gloriaReputacion = (input.reputacion ?? 0) * 0.5
+  return Math.round(gloriaTemporadas + gloriaSeleccion + gloriaReputacion)
+}

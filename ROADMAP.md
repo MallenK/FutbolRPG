@@ -119,7 +119,7 @@ Selección Nacional, torneos internacionales y galardones ya están implementado
 
 Fases 1, 2 y 4 completas; de la Fase 3 solo queda reputación/popularidad (sin diseñar). Lo que sigue, sin orden de fase fijo:
 
-1. **Score de "gloria" unificado** — el leaderboard hoy ordena por nivel/reputación/temporadas por separado, no por un mérito de carrera ponderado (títulos por tamaño de club, idolatría). Reutiliza datos que ya existen (`premios`, `historialTemporadas`). Ver `informe-fallos.md`, Ronda 3.
+1. ~~**Score de "gloria" unificado**~~ ✅ Hecho (Ronda 4, `informe-fallos.md`) — `calcularGloria`/`calcularGloriaTemporada` en `world.ts`, ponderando títulos por tamaño de club (división), ascensos, posición final y prestigio de selección. Es ahora la pestaña por defecto de `/leaderboard`, se muestra en `/comparar/[id]` y como badge en `/dashboard`.
 2. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
 3. **Testing automatizado end-to-end** — Vitest cubre bien la lógica pura; falta Playwright para flujos completos (crear personaje → temporada → partido → fin de temporada).
 4. **Optimización de rendimiento y SEO.**

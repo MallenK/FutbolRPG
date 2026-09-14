@@ -18,6 +18,7 @@ type Stats = {
   asistenciasTotales: number
   partidosTotales: number
   trofeos: number
+  gloria: number
 }
 
 type CompareResponse = {
@@ -30,6 +31,7 @@ type CompareResponse = {
 }
 
 const FILAS: { label: string; key: keyof Stats }[] = [
+  { label: "Gloria", key: "gloria" },
   { label: "Nivel", key: "level" },
   { label: "Reputación", key: "reputacion" },
   { label: "Temporadas", key: "temporada" },

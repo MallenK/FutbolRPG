@@ -20,6 +20,10 @@ import {
   getTorneoTipo,
   simularPartidoSancion,
   generateTransferOffers,
+  calcularGloria,
+  calcularGloriaTemporada,
+  PREMIOS,
+  type SeasonHistoryEntry,
 } from "./world"
 
 describe("calcularPuntosLiga", () => {
@@ -310,6 +314,67 @@ describe("generateSeleccionParon", () => {
       const paron = generateSeleccionParon(1, "Francia")
       expect(paron.partidos.every((p) => p.rival !== "Francia")).toBe(true)
     }
+  })
+})
+
+describe("calcularGloriaTemporada / calcularGloria", () => {
+  const baseTemporada = (overrides: Partial<SeasonHistoryEntry> = {}): SeasonHistoryEntry => ({
+    temporada: 1,
+    club: "CD Test",
+    division: 3,
+    liga: "Segunda División",
+    stats: { partidosJugados: 16, goles: 0, asistencias: 0, valoracionMedia: 6.0 },
+    premios: [],
+    rolAnterior: "Rotación",
+    rolNuevo: "Rotación",
+    posicionFinal: 5,
+    totalEquipos: 10,
+    cambioDivision: "ninguno",
+    ...overrides,
+  })
+
+  it("una temporada sin premios, ascenso ni podio no aporta gloria", () => {
+    expect(calcularGloriaTemporada(baseTemporada())).toBe(0)
+  })
+
+  it("el mismo título de club vale más cuanto más humilde es la división", () => {
+    const enTerceraFederacion = calcularGloriaTemporada(baseTemporada({ division: 1, premios: [PREMIOS.CAMPEON_COPA] }))
+    const enNivelChampions = calcularGloriaTemporada(baseTemporada({ division: 5, premios: [PREMIOS.CAMPEON_COPA] }))
+    expect(enTerceraFederacion).toBeGreaterThan(enNivelChampions)
+    expect(enTerceraFederacion).toBe(80) // 40 base * multiplicador 2.0
+    expect(enNivelChampions).toBe(40) // 40 base * multiplicador 1.0 (sin bonus)
+  })
+
+  it("los títulos de selección no llevan multiplicador de club", () => {
+    const enTerceraFederacion = calcularGloriaTemporada(baseTemporada({ division: 1, premios: [PREMIOS.CAMPEON_MUNDIAL] }))
+    const enNivelChampions = calcularGloriaTemporada(baseTemporada({ division: 5, premios: [PREMIOS.CAMPEON_MUNDIAL] }))
+    expect(enTerceraFederacion).toBe(enNivelChampions)
+    expect(enTerceraFederacion).toBe(150)
+  })
+
+  it("ascender y terminar 1º suman bonus, ponderados también por división", () => {
+    const temporada = baseTemporada({ division: 2, cambioDivision: "ascenso", posicionFinal: 1 })
+    // (15 + 20) * 1.6
+    expect(calcularGloriaTemporada(temporada)).toBeCloseTo(56, 5)
+  })
+
+  it("calcularGloria sin historial se apoya solo en reputación y prestigio de selección", () => {
+    const gloria = calcularGloria({ reputacion: 40, seleccionCapas: 10, seleccionGoles: 3 })
+    // 40*0.5 + 10*2 + 3*4 = 20 + 20 + 12
+    expect(gloria).toBe(52)
+  })
+
+  it("calcularGloria suma todas las temporadas del historial más selección y reputación", () => {
+    const historial = [
+      baseTemporada({ temporada: 1, division: 1, premios: [PREMIOS.CAMPEON_COPA] }), // 80
+      baseTemporada({ temporada: 2, division: 3, premios: [PREMIOS.MVP_TEMPORADA] }), // 25
+    ]
+    const gloria = calcularGloria({ historialTemporadas: historial, reputacion: 20, seleccionCapas: 0, seleccionGoles: 0 })
+    expect(gloria).toBe(80 + 25 + 10) // + reputacion*0.5
+  })
+
+  it("nunca es negativo ni NaN, incluso con datos vacíos", () => {
+    expect(calcularGloria({})).toBe(0)
   })
 })
 

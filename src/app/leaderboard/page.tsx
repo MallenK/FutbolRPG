@@ -8,7 +8,7 @@ const POSITION_LABELS: Record<string, string> = {
   CM: "MC", AM: "MP", W: "EXT", ST: "DEL",
 }
 
-type Category = "level" | "reputation" | "seasons"
+type Category = "gloria" | "level" | "reputation" | "seasons"
 
 type LeaderboardEntry = {
   rank: number
@@ -21,13 +21,25 @@ type LeaderboardEntry = {
   reputation: number
   seasons: number
   goals: number
+  gloria: number
+  trophies: number
 }
 
 const CATEGORIES: { id: Category; label: string }[] = [
+  { id: "gloria", label: "Gloria" },
   { id: "level", label: "Nivel" },
   { id: "reputation", label: "Reputación" },
   { id: "seasons", label: "Temporadas" },
 ]
+
+// Gloria y Goles se muestran siempre (son las dos métricas más "de mérito de
+// carrera"); la tercera columna cambia según la pestaña activa.
+function terceraColumna(category: Category, e: LeaderboardEntry) {
+  if (category === "level") return { label: "nivel", value: `Nv.${e.level}`, color: "text-white" }
+  if (category === "reputation") return { label: "rep", value: e.reputation, color: "text-white" }
+  if (category === "seasons") return { label: "temp", value: e.seasons, color: "text-white" }
+  return { label: "trofeos", value: e.trophies, color: "text-white" }
+}
 
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) return <span className="text-yellow-400 font-black text-lg">1°</span>
@@ -38,7 +50,7 @@ function RankBadge({ rank }: { rank: number }) {
 
 export default function LeaderboardPage() {
   const router = useRouter()
-  const [category, setCategory] = useState<Category>("level")
+  const [category, setCategory] = useState<Category>("gloria")
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -119,19 +131,21 @@ export default function LeaderboardPage() {
                     <p className="text-xs text-gray-500 truncate">{e.userName} · {e.club}</p>
                   </div>
 
-                  {/* Stats */}
+                  {/* Stats: Gloria y Goles siempre visibles, la 3ª columna sigue la pestaña activa */}
                   <div className="flex gap-4 shrink-0 text-right">
                     <div>
-                      <p className="text-white font-bold font-mono">Nv.{e.level}</p>
-                      <p className="text-gray-600 text-xs">nivel</p>
+                      <p className="text-yellow-400 font-bold font-mono">{e.gloria}</p>
+                      <p className="text-gray-600 text-xs">gloria</p>
                     </div>
                     <div>
-                      <p className="text-green-400 font-bold font-mono">{e.reputation}</p>
-                      <p className="text-gray-600 text-xs">rep</p>
+                      <p className="text-blue-400 font-bold font-mono">{e.goals}</p>
+                      <p className="text-gray-600 text-xs">goles</p>
                     </div>
                     <div>
-                      <p className="text-blue-400 font-bold font-mono">{e.seasons}</p>
-                      <p className="text-gray-600 text-xs">temp</p>
+                      <p className={`font-bold font-mono ${terceraColumna(category, e).color}`}>
+                        {terceraColumna(category, e).value}
+                      </p>
+                      <p className="text-gray-600 text-xs">{terceraColumna(category, e).label}</p>
                     </div>
                   </div>
                 </button>

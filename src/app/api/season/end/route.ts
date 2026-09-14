@@ -14,6 +14,7 @@ import {
   calcularPuntosLiga,
   simularTablaFinal,
   resolverAscensoDescenso,
+  PREMIOS,
   type CopaState,
   type EuropaState,
   type Division,
@@ -55,26 +56,26 @@ function calcularPremios(
   seleccion: SeleccionState | undefined,
 ): string[] {
   const premios: string[] = []
-  if (stats.goles >= 10) premios.push("Bota de Oro del Club")
-  if (valoracionMedia >= 8.0) premios.push("MVP de la Temporada")
-  else if (valoracionMedia >= 7.5) premios.push("Mejor Once")
-  if (stats.asistencias >= 8) premios.push("Mejor Asistidor")
-  if (stats.goles >= 5 && stats.asistencias >= 5) premios.push("Mejor Jugador Completo")
-  if (copa?.campeon) premios.push("Campeón de Copa del Rey")
+  if (stats.goles >= 10) premios.push(PREMIOS.BOTA_ORO_CLUB)
+  if (valoracionMedia >= 8.0) premios.push(PREMIOS.MVP_TEMPORADA)
+  else if (valoracionMedia >= 7.5) premios.push(PREMIOS.MEJOR_ONCE)
+  if (stats.asistencias >= 8) premios.push(PREMIOS.MEJOR_ASISTIDOR)
+  if (stats.goles >= 5 && stats.asistencias >= 5) premios.push(PREMIOS.MEJOR_JUGADOR_COMPLETO)
+  if (copa?.campeon) premios.push(PREMIOS.CAMPEON_COPA)
   if (europa?.eliminatoria?.campeon) {
     const labels: Record<string, string> = {
-      champions: "Campeón de la Champions League",
-      europa: "Campeón de la Europa League",
-      conference: "Campeón de la Conference League",
+      champions: PREMIOS.CAMPEON_CHAMPIONS,
+      europa: PREMIOS.CAMPEON_EUROPA_LEAGUE,
+      conference: PREMIOS.CAMPEON_CONFERENCE,
     }
-    premios.push(labels[europa.competicion] ?? "Campeón de Europa")
+    premios.push(labels[europa.competicion] ?? PREMIOS.CAMPEON_EUROPA_GENERICO)
   }
   if (seleccion?.torneo?.campeon) {
     const labels: Record<string, string> = {
-      eurocopa: "Campeón de la Eurocopa",
-      mundial: "Campeón del Mundo",
+      eurocopa: PREMIOS.CAMPEON_EUROCOPA,
+      mundial: PREMIOS.CAMPEON_MUNDIAL,
     }
-    premios.push(labels[seleccion.torneo.tipo] ?? "Campeón Internacional")
+    premios.push(labels[seleccion.torneo.tipo] ?? PREMIOS.CAMPEON_INTERNACIONAL_GENERICO)
   }
   return premios
 }

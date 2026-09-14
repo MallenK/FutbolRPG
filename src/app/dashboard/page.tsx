@@ -8,7 +8,7 @@ import XPBar from "@/components/XPBar"
 import VideoLoader from "@/components/VideoLoader"
 import TrophyShowcase from "@/components/TrophyShowcase"
 import { POSITION_STAT_PROFILES, STAT_BY_KEY, PERSONALITIES, TRAITS, ORIGINS, type Position } from "@/lib/player-config"
-import { getDivisionInfo } from "@/lib/world"
+import { getDivisionInfo, calcularGloria, type SeasonHistoryEntry } from "@/lib/world"
 
 type SimpleMatch = { valoracion: number; goles: number; asistencias: number; marcador: string }
 
@@ -63,13 +63,6 @@ type PlayerData = {
       historialTemporadas?: SeasonHistoryEntry[]
     }
   }
-}
-
-type SeasonHistoryEntry = {
-  temporada: number
-  club: string
-  liga: string
-  premios: string[]
 }
 
 type RivalStats = {
@@ -229,6 +222,14 @@ export default function DashboardPage() {
   const ultimosPartidos = player?.state.carrera.ultimosPartidos ?? []
   const attrPoints = player?.state.attributePoints ?? 0
   const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
+  const gloria = player
+    ? calcularGloria({
+        historialTemporadas: player.state.carrera.historialTemporadas,
+        reputacion: player.state.carrera.reputacion,
+        seleccionCapas: player.state.carrera.seleccion?.capas,
+        seleccionGoles: player.state.carrera.seleccion?.golesSeleccion,
+      })
+    : 0
 
   const handlePremiumUpgrade = async () => {
     const res = await fetch("/api/stripe/checkout", { method: "POST" })
@@ -336,6 +337,9 @@ export default function DashboardPage() {
                     </p>
                     <p className="text-green-400 text-sm mt-0.5 font-semibold">
                       {player.state.carrera.club} · {player.state.carrera.rol}
+                    </p>
+                    <p className="text-yellow-400 text-sm mt-1 font-bold flex items-center gap-1">
+                      🏆 {gloria} <span className="text-gray-500 font-normal text-xs">de gloria</span>
                     </p>
                   </div>
                 </div>
