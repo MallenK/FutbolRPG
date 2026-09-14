@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import StatBar from "@/components/StatBar"
 import XPBar from "@/components/XPBar"
 import VideoLoader from "@/components/VideoLoader"
+import TrophyShowcase from "@/components/TrophyShowcase"
 import { POSITION_STAT_PROFILES, STAT_BY_KEY, PERSONALITIES, TRAITS, ORIGINS, type Position } from "@/lib/player-config"
 import { getDivisionInfo } from "@/lib/world"
 
@@ -119,11 +120,25 @@ export default function DashboardPage() {
   const [pendingOffers, setPendingOffers] = useState(0)
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
   const [verificationSent, setVerificationSent] = useState(false)
+  const [profileLinkCopied, setProfileLinkCopied] = useState(false)
 
   const handleResendVerification = async () => {
     if (!session?.user.email) return
     await sendVerificationEmail({ email: session.user.email, callbackURL: "/dashboard" })
     setVerificationSent(true)
+  }
+
+  const handleShareProfile = async () => {
+    if (!player) return
+    const url = `${window.location.origin}/jugador/${player.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setProfileLinkCopied(true)
+      setTimeout(() => setProfileLinkCopied(false), 2000)
+    } catch {
+      // Portapapeles no disponible (navegador antiguo, permiso denegado): sin
+      // feedback, pero tampoco rompe nada — no es una acción crítica.
+    }
   }
 
   useEffect(() => {
@@ -299,12 +314,20 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => router.push("/season")}
-                  className="w-full sm:w-auto px-6 py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors shrink-0"
-                >
-                  Ver temporada →
-                </button>
+                <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
+                  <button
+                    onClick={() => router.push("/season")}
+                    className="w-full sm:w-auto px-6 py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
+                  >
+                    Ver temporada →
+                  </button>
+                  <button
+                    onClick={handleShareProfile}
+                    className="w-full sm:w-auto text-xs text-gray-500 hover:text-white transition-colors"
+                  >
+                    {profileLinkCopied ? "✓ Enlace copiado" : "🔗 Compartir mi perfil"}
+                  </button>
+                </div>
               </div>
               <div className="mt-4 pt-4 border-t border-gray-800">
                 <XPBar level={player.state.level ?? 1} xp={player.state.xp ?? 0} />
@@ -452,42 +475,7 @@ export default function DashboardPage() {
             )}
 
             {/* Vitrina de trofeos */}
-            {(() => {
-              const historial = player.state.carrera.historialTemporadas ?? []
-              const totalPremios = historial.reduce((n, t) => n + t.premios.length, 0)
-              if (historial.length === 0) return null
-              return (
-                <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vitrina de trofeos</h3>
-                    <span className="text-xs text-gray-600 font-mono">
-                      {totalPremios} galardón{totalPremios !== 1 ? "es" : ""} en {historial.length} temporada{historial.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  {totalPremios === 0 ? (
-                    <p className="text-gray-600 text-xs text-center py-4">Todavía no has ganado ningún premio. ¡Sigue jugando!</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {[...historial].reverse().filter((t) => t.premios.length > 0).map((t) => (
-                        <div key={t.temporada} className="flex items-start gap-3">
-                          <span className="text-gray-600 text-xs font-mono w-16 shrink-0 pt-0.5">T{t.temporada}</span>
-                          <div className="flex-1">
-                            <p className="text-gray-500 text-xs mb-1">{t.club}</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {t.premios.map((p, i) => (
-                                <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-semibold">
-                                  🏆 {p}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
+            <TrophyShowcase historial={player.state.carrera.historialTemporadas ?? []} />
 
             {/* Season stats */}
             <div className="grid grid-cols-4 gap-3">

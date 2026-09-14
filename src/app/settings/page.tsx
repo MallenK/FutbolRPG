@@ -18,6 +18,7 @@ type Preferencias = {
   ocultarAvisoMercado?: boolean
   ocultoEnRanking?: boolean
   ocultoEnActividad?: boolean
+  perfilPublicoOculto?: boolean
 }
 
 type PlayerData = {
@@ -108,6 +109,7 @@ export default function SettingsPage() {
   const [ocultarAvisoMercado, setOcultarAvisoMercado] = useState(false)
   const [ocultoEnRanking, setOcultoEnRanking] = useState(false)
   const [ocultoEnActividad, setOcultoEnActividad] = useState(false)
+  const [perfilPublicoOculto, setPerfilPublicoOculto] = useState(false)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -129,6 +131,7 @@ export default function SettingsPage() {
           setOcultarAvisoMercado(prefs.ocultarAvisoMercado ?? false)
           setOcultoEnRanking(prefs.ocultoEnRanking ?? false)
           setOcultoEnActividad(prefs.ocultoEnActividad ?? false)
+          setPerfilPublicoOculto(prefs.perfilPublicoOculto ?? false)
         }
         setLoading(false)
       })
@@ -496,6 +499,15 @@ export default function SettingsPage() {
                 onChange={(value) => {
                   setOcultoEnActividad(value)
                   savePreference({ ocultoEnActividad: value })
+                }}
+              />
+              <ToggleRow
+                label="Ocultar mi perfil público"
+                description="Desactiva el enlace compartible de tu perfil (/jugador/...). Nadie sin sesión podrá verlo."
+                checked={perfilPublicoOculto}
+                onChange={(value) => {
+                  setPerfilPublicoOculto(value)
+                  savePreference({ perfilPublicoOculto: value })
                 }}
               />
             </section>

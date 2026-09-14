@@ -6,3 +6,8 @@ export async function getPlayerByUserId(userId: string) {
   const rows = await db.select().from(player).where(eq(player.userId, userId))
   return rows[0] ?? null
 }
+
+export async function getPlayerById(id: string) {
+  const rows = await db.select().from(player).where(eq(player.id, id))
+  return rows[0] ?? null
+}

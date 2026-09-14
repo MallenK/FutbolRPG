@@ -31,6 +31,7 @@ type Fixture = {
 }
 
 type PlayerState = {
+  id: string
   name: string
   position: string
   posicionesSecundarias?: string[]
@@ -51,6 +52,7 @@ type PlayerState = {
     contrato?: ContratoState
     mercado?: MercadoState
     eventoActual: CareerEvent | null
+    eventosPendientes?: CareerEvent[]
     premios: string[]
     estadisticasTemporada: {
       partidosJugados: number; goles: number; asistencias: number; valoracionMedia: number
@@ -122,6 +124,7 @@ export default function SeasonPage() {
   const [seasonNarrativeLoading, setSeasonNarrativeLoading] = useState(false)
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
   const [jugarComoSecundaria, setJugarComoSecundaria] = useState(false)
+  const [summaryLinkCopied, setSummaryLinkCopied] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -146,6 +149,7 @@ export default function SeasonPage() {
     const jornadaActual = carrera.jornadaActual ?? 0
 
     const ps: PlayerState = {
+      id: player.id,
       name: player.name,
       position: player.position ?? "CM",
       posicionesSecundarias: (player.state?.posicionesSecundarias as string[] | undefined) ?? [],
@@ -341,6 +345,18 @@ export default function SeasonPage() {
     await loadPlayer()
   }
 
+  const handleShareSummary = async () => {
+    if (!playerState || !summary) return
+    const url = `${window.location.origin}/jugador/${playerState.id}/temporada/${summary.temporada}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setSummaryLinkCopied(true)
+      setTimeout(() => setSummaryLinkCopied(false), 2000)
+    } catch {
+      // Portapapeles no disponible: no crítico, se ignora igual que en dashboard.
+    }
+  }
+
   if (isPending || phase === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
@@ -510,6 +526,11 @@ export default function SeasonPage() {
                     {TIPO_LABELS[carrera.eventoActual.tipo]}
                   </span>
                   <p className="text-gray-500 text-xs">Evento de temporada</p>
+                  {!!carrera.eventosPendientes?.length && (
+                    <p className="text-gray-500 text-xs ml-auto">
+                      +{carrera.eventosPendientes.length} más después de este
+                    </p>
+                  )}
                 </div>
                 <h2 className="text-xl font-bold text-white">{carrera.eventoActual.titulo}</h2>
                 <p className="text-gray-300 text-sm leading-relaxed">{carrera.eventoActual.descripcion}</p>
@@ -884,6 +905,12 @@ export default function SeasonPage() {
                     </div>
                   )}
                 </div>
+                <button
+                  onClick={handleShareSummary}
+                  className="w-full text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  {summaryLinkCopied ? "✓ Enlace copiado" : "🔗 Compartir este resumen"}
+                </button>
                 <button
                   onClick={handleNewSeason}
                   className="w-full py-3 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl transition-colors"
