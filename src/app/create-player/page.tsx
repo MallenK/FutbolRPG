@@ -25,6 +25,12 @@ const TOTAL_STEPS = 7
 const EXTRA_POINTS = 30
 const MAX_PER_STAT = 15
 
+const MODOS_JUEGO: { id: "completo" | "decisivos" | "simulado"; label: string; description: string }[] = [
+  { id: "completo", label: "Completo", description: "Juegas todos los partidos, de todas las competiciones, tú mismo." },
+  { id: "decisivos", label: "Decisivos", description: "Juegas eliminatorias, selección y los últimos tramos de liga; el resto se resuelve solo." },
+  { id: "simulado", label: "Simulado", description: "La temporada entera (partidos y eventos) se resuelve automáticamente de un click." },
+]
+
 const DIVISION_OPTIONS = [
   { nivel: 1, tag: "Difícil",   desc: "Clubs regionales. La carrera más larga y épica." },
   { nivel: 2, tag: "Normal",    desc: "Fútbol semiprofesional. Progresión más realista." },
@@ -116,6 +122,7 @@ export default function CreatePlayerPage() {
   // Step 6: Division + club
   const [divisionInicial, setDivisionInicial] = useState(3)
   const [clubElegido, setClubElegido] = useState(getDivisionInfo(3).clubes[0])
+  const [modoJuego, setModoJuego] = useState<"completo" | "decisivos" | "simulado">("completo")
 
   // Reset style when position changes
   useEffect(() => {
@@ -196,6 +203,7 @@ export default function CreatePlayerPage() {
           nationality,
           divisionInicial,
           attributes,
+          modoJuego,
           rpg: {
             apellido,
             apodo: apodo.trim() || undefined,
@@ -668,6 +676,30 @@ export default function CreatePlayerPage() {
                 <div className="border-t border-gray-800 pt-4">
                   <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Equipo preferente</p>
                   <p className="text-white font-semibold">{clubElegido} · {divInfo.nombre}</p>
+                </div>
+              </div>
+
+              {/* Modo de juego */}
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-3">
+                <p className="text-xs text-gray-500 uppercase tracking-wider">
+                  Modo de juego <span className="text-gray-600 normal-case">(puedes cambiarlo luego en Ajustes)</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {MODOS_JUEGO.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setModoJuego(m.id)}
+                      className={`text-left p-3 rounded-xl border transition-colors ${
+                        modoJuego === m.id
+                          ? "bg-green-500/10 border-green-500 text-white"
+                          : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                      }`}
+                    >
+                      <p className="font-bold text-sm mb-1">{m.label}</p>
+                      <p className="text-xs text-gray-500">{m.description}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
 

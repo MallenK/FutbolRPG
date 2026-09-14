@@ -41,6 +41,7 @@ type PlayerData = {
     peso?: number
     apodo?: string
     dorsal?: number
+    racha?: { diasConsecutivos: number; ultimoDia: string }
     preferencias?: { ocultarAvisoMercado?: boolean }
     carrera: {
       club: string
@@ -69,6 +70,16 @@ type SeasonHistoryEntry = {
   club: string
   liga: string
   premios: string[]
+}
+
+type RivalStats = {
+  playerId: string
+  playerName: string
+  apodo?: string
+  club: string
+  level: number
+  reputacion: number
+  golesTotales: number
 }
 
 const POSITION_LABELS: Record<string, string> = {
@@ -121,6 +132,7 @@ export default function DashboardPage() {
   const [pendingMarketOffers, setPendingMarketOffers] = useState(0)
   const [verificationSent, setVerificationSent] = useState(false)
   const [profileLinkCopied, setProfileLinkCopied] = useState(false)
+  const [rival, setRival] = useState<{ rivalId: string; rival: RivalStats | null; me?: RivalStats } | null>(null)
 
   const handleResendVerification = async () => {
     if (!session?.user.email) return
@@ -164,6 +176,11 @@ export default function DashboardPage() {
           .then((data) => setPendingMarketOffers(data?.myOfferCount ?? 0))
           .catch(() => {})
       })
+
+    fetch("/api/rival")
+      .then((r) => r.json())
+      .then((data) => { if (data?.rivalId) setRival(data) })
+      .catch(() => {})
   }, [session])
 
   const handleUpgrade = async (stat: string, group: keyof PlayerData["attributes"]) => {
@@ -227,6 +244,14 @@ export default function DashboardPage() {
             Futbol<span className="text-green-400">RPG</span>
           </h1>
           <div className="flex items-center gap-3">
+            {player?.state.racha && player.state.racha.diasConsecutivos > 1 && (
+              <span
+                title="Días seguidos jugando"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-xs font-bold"
+              >
+                🔥 {player.state.racha.diasConsecutivos} días
+              </span>
+            )}
             {pendingMarketOffers > 0 && (
               <button
                 onClick={() => router.push("/mercado")}
@@ -333,6 +358,36 @@ export default function DashboardPage() {
                 <XPBar level={player.state.level ?? 1} xp={player.state.xp ?? 0} />
               </div>
             </div>
+
+            {/* Rivalidad */}
+            {rival?.rival && (
+              <button
+                onClick={() => router.push(`/comparar/${rival.rivalId}`)}
+                className="w-full bg-gray-900 rounded-2xl border border-red-500/30 p-5 flex items-center justify-between hover:bg-gray-800/60 transition-colors text-left"
+              >
+                <div>
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">🥊 Tu rival</p>
+                  <p className="font-bold text-white">
+                    {rival.rival.apodo ? `"${rival.rival.apodo}"` : rival.rival.playerName}
+                  </p>
+                  <p className="text-gray-500 text-xs">{rival.rival.club}</p>
+                </div>
+                <div className="flex gap-4 text-right shrink-0">
+                  <div>
+                    <p className={`font-bold font-mono ${(player.state.level ?? 1) >= rival.rival.level ? "text-green-400" : "text-red-400"}`}>
+                      Nv.{rival.rival.level}
+                    </p>
+                    <p className="text-gray-600 text-xs">nivel</p>
+                  </div>
+                  <div>
+                    <p className={`font-bold font-mono ${(rival.me?.golesTotales ?? 0) >= rival.rival.golesTotales ? "text-green-400" : "text-red-400"}`}>
+                      {rival.rival.golesTotales}
+                    </p>
+                    <p className="text-gray-600 text-xs">goles</p>
+                  </div>
+                </div>
+              </button>
+            )}
 
             {/* Attribute points banner */}
             {attrPoints > 0 && (
