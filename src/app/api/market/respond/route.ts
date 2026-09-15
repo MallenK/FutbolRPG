@@ -63,9 +63,22 @@ export async function POST(req: NextRequest) {
   const carrera = (state?.carrera ?? {}) as Record<string, unknown>
   const previousClub = (carrera?.club as string) ?? "—"
 
+  // Club/liga/división del fichaje se leen en vivo del jugador que ofreció,
+  // no del snapshot guardado en la oferta (`transferOffer.fromClub`, que
+  // nunca guardó liga/división y además puede haber quedado obsoleto si el
+  // que ofrece cambió de club mientras la oferta estaba pendiente). Sin esto,
+  // el aceptante se quedaba con un club nuevo pero la liga/división de antes
+  // — rivales, elegibilidad europea y perfil público, todos mal (ver
+  // informe-fallos.md, Ronda 6, hallazgo A3).
+  const offererPlayer = await getPlayerByUserId(offer[0].fromUserId)
+  const offererCarrera = (offererPlayer?.state as Record<string, unknown> | undefined)?.carrera as
+    | Record<string, unknown>
+    | undefined
   const newCarrera = {
     ...carrera,
-    club: offer[0].fromClub,
+    club: (offererCarrera?.club as string | undefined) ?? offer[0].fromClub,
+    liga: (offererCarrera?.liga as string | undefined) ?? (carrera?.liga as string | undefined),
+    divisionActual: (offererCarrera?.divisionActual as number | undefined) ?? (carrera?.divisionActual as number | undefined),
   }
   const newState = { ...state, carrera: newCarrera }
 
@@ -91,17 +104,18 @@ export async function POST(req: NextRequest) {
     .set({ active: false })
     .where(eq(transferListing.id, listing[0].id))
 
-  // Log the transfer
+  // Log the transfer — usa el club resuelto en vivo (newCarrera.club), no el
+  // snapshot de la oferta, por la misma razón de arriba.
   await db.insert(activityLog).values({
     id: createId(),
     userId: session.user.id,
     playerName: found.name,
     playerPosition: found.position,
-    clubName: offer[0].fromClub,
+    clubName: newCarrera.club,
     eventType: "transfer",
     data: {
       fromClub: previousClub,
-      toClub: offer[0].fromClub,
+      toClub: newCarrera.club,
       offeredBy: offer[0].fromPlayerName,
     },
   })
@@ -110,7 +124,7 @@ export async function POST(req: NextRequest) {
     const offerer = await getUserContactByUserId(offer[0].fromUserId)
     if (offerer && !offerer.notificacionesOfertasDesactivadas) {
       const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/dashboard`
-      await sendOfferAcceptedEmail(offerer.email, offerer.name, offer[0].fromClub, url)
+      await sendOfferAcceptedEmail(offerer.email, offerer.name, newCarrera.club, url)
     }
   } catch (err) {
     console.error("[market/respond] fallo al enviar email de notificación", err)
@@ -119,6 +133,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     action: "accepted",
-    newClub: offer[0].fromClub,
+    newClub: newCarrera.club,
   })
 }
