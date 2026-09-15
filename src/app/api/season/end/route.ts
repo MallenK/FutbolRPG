@@ -219,13 +219,18 @@ export async function POST() {
           id: "renovar_club_actual",
           texto: "Renovar con el club actual",
           narrativo: "Las negociaciones son rápidas. Sigues en casa.",
-          efectos: { moral: 5, confianza_entrenador: 5 },
+          // Renovación estándar: mismas 2 temporadas que ya se aplicaban por
+          // defecto, ahora como consecuencia real de elegir esta opción y no
+          // como algo que pasaba igual decidieras lo que decidieras.
+          efectos: { moral: 5, confianza_entrenador: 5, contratoTemporadas: 2 },
         },
         {
           id: "buscar_nuevo_club",
           texto: "Explorar el mercado como agente libre",
-          narrativo: "Tu representante empieza a mover hilos. Hay interés de varios clubes.",
-          efectos: { reputacion: 3 },
+          narrativo: "Tu representante empieza a mover hilos. Llegan las primeras ofertas de otros clubes.",
+          // Te pone en el mercado NPC de verdad, con ofertas reales ya
+          // generadas — antes esta opción no hacía nada más que el texto.
+          efectos: { reputacion: 3, activarMercado: true },
         },
       ],
     }
@@ -239,14 +244,18 @@ export async function POST() {
         {
           id: "firmar_renovacion",
           texto: "Firmar la renovación que te ofrecen",
-          narrativo: "Estabilidad asegurada. El director deportivo te da la mano satisfecho.",
-          efectos: { moral: 5, confianza_entrenador: 8 },
+          narrativo: "Estabilidad asegurada. El director deportivo te da la mano satisfecho — y por firmar ya, te reconocen una temporada extra.",
+          // Recompensa por renovar pronto: una temporada más que la
+          // renovación estándar (3 en vez de 2).
+          efectos: { moral: 5, confianza_entrenador: 8, contratoTemporadas: 3 },
         },
         {
           id: "esperar_mejores_ofertas",
           texto: "Esperar a ver si llegan mejores ofertas",
-          narrativo: "El club no está contento con tu postura, pero respeta tu decisión. La tensión es palpable.",
-          efectos: { moral: -3, confianza_entrenador: -10 },
+          narrativo: "El club no está contento con tu postura, pero respeta tu decisión. Tu representante ya está tanteando otros destinos.",
+          // Te abre el mercado NPC ya, antes de que el contrato expire de
+          // verdad — el riesgo/recompensa de no renovar a la primera.
+          efectos: { moral: -3, confianza_entrenador: -10, activarMercado: true },
         },
       ],
     }

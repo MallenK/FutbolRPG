@@ -10,6 +10,14 @@ export type EventoEfectos = {
   confianza_vestuario?: number
   transferirA?: { club: string; liga: string; rol: string; division: number }
   seleccionConvocado?: boolean
+  // Renegociar el contrato ahora mismo, a un número de temporadas concreto
+  // (en vez de dejar que se renueve solo, en silencio, al cerrar la
+  // temporada — ver informe-fallos.md, Ronda 6, hallazgo M3).
+  contratoTemporadas?: number
+  // Ponerse en el mercado de fichajes NPC de verdad (genera ofertas reales
+  // ya, no solo un efecto cosmético) — mismo mecanismo que "Solicitar
+  // traspaso" en /transfer.
+  activarMercado?: boolean
   attributePoints?: number
   addTrait?: string
   removeTrait?: string

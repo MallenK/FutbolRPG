@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { type CareerEvent, type OpcionEvento, getEventById, pickAutoOpcion } from "@/engine/career-events"
-import { getDivisionInfo } from "@/lib/world"
+import { getDivisionInfo, generateTransferOffers, type ContratoState, type MercadoState } from "@/lib/world"
 import { retirarJugador } from "@/lib/legado"
 
 export async function POST(req: NextRequest) {
@@ -84,6 +84,36 @@ export async function POST(req: NextRequest) {
   // Handle selección nacional
   if (fx.seleccionConvocado) {
     newCarreraFields = { ...newCarreraFields, enSeleccion: true }
+  }
+
+  // Renegociación de contrato: la decisión del evento decide de verdad
+  // cuántas temporadas quedan, en vez de que se renueve solo en silencio al
+  // cerrar la temporada sin importar qué se eligiera (ver informe-fallos.md,
+  // Ronda 6, hallazgo M3).
+  if (fx.contratoTemporadas != null) {
+    const currentContrato = carrera.contrato as ContratoState | undefined
+    const newContrato: ContratoState = {
+      temporadasRestantes: fx.contratoTemporadas,
+      salarioRelativo: currentContrato?.salarioRelativo ?? 2,
+    }
+    newCarreraFields = { ...newCarreraFields, contrato: newContrato }
+  }
+
+  // "Explorar el mercado": pone al jugador en la lista de transferibles del
+  // mercado NPC de verdad, con ofertas reales generadas ya — mismo mecanismo
+  // que "Solicitar traspaso" en /transfer, en vez del texto sin efecto que
+  // era antes.
+  if (fx.activarMercado) {
+    const currentMercado = carrera.mercado as MercadoState | undefined
+    const jornadaActual = (carrera.jornadaActual as number) ?? 1
+    const currentClub = (carrera.club as string) ?? ""
+    const newOffers = generateTransferOffers(currentRep, currentDivision, currentClub, jornadaActual)
+    const newMercado: MercadoState = {
+      enLista: true,
+      ofertasActivas: [...(currentMercado?.ofertasActivas ?? []), ...newOffers],
+      ultimaActualizacion: jornadaActual,
+    }
+    newCarreraFields = { ...newCarreraFields, mercado: newMercado }
   }
 
   // Track resolved event ids to avoid repetition

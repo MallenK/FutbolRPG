@@ -1038,8 +1038,8 @@ export default function SeasonPage() {
                   {summary.contrato?.expiraba && (
                     <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
                       <div>
-                        <p className="text-orange-300 font-bold text-sm">Contrato renovado automáticamente</p>
-                        <p className="text-orange-400/70 text-xs">{summary.contrato.temporadasRestantes} temporadas nuevas</p>
+                        <p className="text-orange-300 font-bold text-sm">Tu contrato ha expirado</p>
+                        <p className="text-orange-400/70 text-xs">Al empezar la nueva temporada, tendrás que decidir tu futuro</p>
                       </div>
                     </div>
                   )}
