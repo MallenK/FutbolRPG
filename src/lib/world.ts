@@ -204,6 +204,33 @@ export function resolverAscensoDescenso(
 export const COPA_RONDAS = ["R32", "R16", "QF", "SF", "F"] as const
 export type CopaRonda = typeof COPA_RONDAS[number]
 
+// Nombres reales que usa la prensa/TV española para estas rondas, en vez de
+// la jerga de bracket "R32/R16/QF/SF/F" (que solo tiene sentido si vienes del
+// inglés). Solo afecta a lo que se pinta en pantalla — los códigos internos
+// (COPA_RONDAS, TORNEO_ELIM_RONDAS en calendar.ts, etc.) no cambian, así que
+// ronda ya guardada en el historial de cuentas existentes sigue funcionando
+// igual con esta misma función.
+const RONDA_LABELS: Record<string, string> = {
+  R32: "Dieciseisavos",
+  R16: "Octavos",
+  QF: "Cuartos",
+  SF: "Semifinal",
+  F: "Final",
+}
+export function formatRonda(ronda: string): string {
+  return RONDA_LABELS[ronda] ?? ronda
+}
+
+// Misma idea que formatRonda pero en el formato corto que usan de verdad la
+// prensa y las tablas de sorteo españolas (p. ej. "Dieciseisavos (1/16)"),
+// para las píldoras de progresión donde no cabe la palabra completa.
+const RONDA_LABELS_CORTAS: Record<string, string> = {
+  R32: "1/16", R16: "1/8", QF: "1/4", SF: "SF", F: "F",
+}
+export function formatRondaCorta(ronda: string): string {
+  return RONDA_LABELS_CORTAS[ronda] ?? ronda
+}
+
 export type CopaHistorialEntry = { ronda: string; rival: string; ganado: boolean; resultado: string }
 
 export type CopaState = {

@@ -44,6 +44,7 @@ const RESULT_SOUND: Record<string, SoundName> = {
 import {
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
+  formatRonda,
   type CopaState,
   type EuropaState,
   type SeleccionState,
@@ -154,7 +155,7 @@ function buildMatchContext(
 
   if (tipo === "copa") {
     const copa = carrera?.copa as CopaState | undefined
-    const rondaName = copa ? (COPA_RONDAS[copa.rondaIdx] ?? "R32") : "R32"
+    const rondaName = formatRonda(copa ? (COPA_RONDAS[copa.rondaIdx] ?? "R32") : "R32")
     return {
       tipo: "copa",
       rival: copa?.rival ?? "Rival",
@@ -176,7 +177,7 @@ function buildMatchContext(
     const ronda = nextMatch
       ? "Fase de Grupos"
       : elimMatch
-        ? (["R16","QF","SF","F"][elimMatch.rondaIdx] ?? "Eliminatoria")
+        ? formatRonda(["R16","QF","SF","F"][elimMatch.rondaIdx] ?? "Eliminatoria")
         : "Europa"
     return { tipo: "europa", rival, esLocal, club, competicion, ronda }
   }
@@ -255,6 +256,7 @@ function MatchPageInner() {
   const [lastResult, setLastResult] = useState<TurnResult | null>(null)
   const [lastEncajado, setLastEncajado] = useState(false)
   const [saveError, setSaveError] = useState("")
+  const [showAbandonConfirm, setShowAbandonConfirm] = useState(false)
   const [geminiNarrative, setGeminiNarrative] = useState<string | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
   // Rasgo "Polivalente": si el usuario activó "jugar como secundaria" en /season
@@ -387,8 +389,17 @@ function MatchPageInner() {
       // visualización, nunca hay que usarlo para decidir cuál marcador es el mío.
       const ganado = matchState.marcador.local > matchState.marcador.visitante
 
+      // Antes, un fallo del servidor (no de red — fetch no lanza excepción en
+      // un 4xx/5xx) pasaba desapercibido: el catch nunca saltaba, y la
+      // pantalla de victoria se mostraba igual con las estadísticas como si
+      // se hubieran guardado, cuando en realidad no se había persistido nada
+      // (ver auditoría UX, heurística 9). Ahora se comprueba res.ok, y si
+      // falla (de red o del servidor) el partido se queda en la pantalla del
+      // último turno con un aviso y la posibilidad de reintentar pulsando
+      // "Continuar" otra vez, en vez de avanzar a "finished".
+      setSaveError("")
       try {
-        await fetch("/api/match/save", {
+        const res = await fetch("/api/match/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -408,8 +419,15 @@ function MatchPageInner() {
             expulsado: matchState.expulsado,
           }),
         })
+        if (!res.ok) {
+          setSaveError("No se pudo guardar el partido. Tus estadísticas todavía no se han aplicado — pulsa \"Continuar\" para reintentarlo.")
+          setPhase("result")
+          return
+        }
       } catch {
-        setSaveError("Error guardando el partido")
+        setSaveError("No se pudo guardar el partido — revisa tu conexión. Tus estadísticas todavía no se han aplicado; pulsa \"Continuar\" para reintentarlo.")
+        setPhase("result")
+        return
       }
       setPhase("finished")
       return
@@ -510,10 +528,6 @@ function MatchPageInner() {
             </div>
           </div>
 
-          {saveError && (
-            <p className="text-red-400 text-sm text-center">{saveError}</p>
-          )}
-
           <div className="space-y-2">
             {matchState.log.map((r, i) => (
               <div key={i} className="bg-gray-900 rounded-lg px-4 py-2 flex items-center justify-between text-sm">
@@ -539,18 +553,30 @@ function MatchPageInner() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="sticky top-0 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500">
+        <div className="max-w-lg mx-auto flex items-center justify-between gap-2">
+          {/* Botón de salida — antes no había ninguna forma de abandonar el
+              partido salvo el gesto "atrás" del navegador, sin aviso ni
+              confirmación (ver auditoría UX, heurística 3). Nada del partido
+              se guarda hasta el último turno, así que salir aquí no deja
+              ningún dato a medias. */}
+          <button
+            onClick={() => setShowAbandonConfirm(true)}
+            aria-label="Abandonar partido"
+            className="shrink-0 w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center text-sm transition-colors"
+          >
+            ✕
+          </button>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500 truncate">
               {enginePlayer?.personal.apodo ? `"${enginePlayer.personal.apodo}"` : enginePlayer?.personal.nombre} ·{" "}
               {POSICION_LABELS[posicionEfectiva ?? enginePlayer?.posicionPrincipal ?? Posicion.DELANTERO]}
               {posicionEfectiva && <span className="text-orange-400"> (fuera de posición)</span>}
             </p>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-gray-600 truncate">
               {matchContext?.club ?? "—"} · {matchContext?.competicion}
             </p>
           </div>
-          <div className="text-center">
+          <div className="text-center shrink-0">
             <p className="text-xl font-black">
               {matchState.marcador.local} — {matchState.marcador.visitante}
             </p>
@@ -558,11 +584,32 @@ function MatchPageInner() {
               {situacion ? `min. ${situacion.minuto}` : ""}
             </p>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <p className="text-xs text-gray-500">Turno</p>
             <p className="text-sm font-bold">{matchState.turno}/{matchState.totalTurnos}</p>
           </div>
         </div>
+        {showAbandonConfirm && (
+          <div className="max-w-lg mx-auto mt-3 bg-red-500/10 border border-red-500/30 rounded-xl p-3 space-y-2">
+            <p className="text-red-300 text-xs">
+              ¿Abandonar el partido? Perderás el progreso de este partido — no se guarda nada hasta el último turno.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push("/season")}
+                className="flex-1 py-2 bg-red-500 hover:bg-red-400 text-black font-bold rounded-lg text-xs transition-colors"
+              >
+                Sí, abandonar
+              </button>
+              <button
+                onClick={() => setShowAbandonConfirm(false)}
+                className="flex-1 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold rounded-lg text-xs transition-colors"
+              >
+                Seguir jugando
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
@@ -656,14 +703,21 @@ function MatchPageInner() {
         )}
 
         {phase === "result" && lastResult && (
-          <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
-            <ResultReveal
-              result={lastResult}
-              onContinue={handleContinue}
-              isLastTurn={matchState.turno >= matchState.totalTurnos}
-              geminiNarrative={geminiNarrative}
-              geminiLoading={geminiLoading}
-            />
+          <div className="space-y-3">
+            {saveError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                <p className="text-red-300 text-sm">{saveError}</p>
+              </div>
+            )}
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+              <ResultReveal
+                result={lastResult}
+                onContinue={handleContinue}
+                isLastTurn={matchState.turno >= matchState.totalTurnos}
+                geminiNarrative={geminiNarrative}
+                geminiLoading={geminiLoading}
+              />
+            </div>
           </div>
         )}
 

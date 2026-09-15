@@ -1,6 +1,8 @@
 "use client"
 
 import { usePathname, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useSession } from "@/lib/auth-client"
 
 const NAV_ITEMS = [
   {
@@ -31,20 +33,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    // Antes "Ranking" y "Actividad" eran dos destinos separados; se fusionaron
+    // en una sola pantalla con pestañas internas (ver leaderboard/page.tsx) —
+    // ninguna de las dos resuelve por sí sola una tarea frecuente de sesión,
+    // así que no se justificaban dos huecos del nav principal (auditoría UX,
+    // Ronda 8).
     href: "/leaderboard",
-    label: "Ranking",
+    label: "Comunidad",
     icon: (active: boolean) => (
       <svg className={`w-5 h-5 ${active ? "text-green-400" : "text-gray-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 17h2v-6H3v6zm5 0h2V7H8v10zm5 0h2v-4h-2v4zm5 0h2v-9h-2v9z" />
-      </svg>
-    ),
-  },
-  {
-    href: "/feed",
-    label: "Actividad",
-    icon: (active: boolean) => (
-      <svg className={`w-5 h-5 ${active ? "text-green-400" : "text-gray-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h6" />
       </svg>
     ),
   },
@@ -65,15 +63,39 @@ const HIDDEN_PATHS = ["/", "/login", "/register", "/create-player", "/match"]
 export default function BottomNav() {
   const pathname = usePathname()
   const router = useRouter()
+  const { data: session } = useSession()
+  const [offerCount, setOfferCount] = useState(0)
 
-  if (HIDDEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + "?"))) return null
-  if (pathname.startsWith("/match")) return null
+  const hidden = HIDDEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + "?")) || pathname.startsWith("/match")
+
+  // Aviso de ofertas de fichaje (club NPC + jugadores reales) visible desde
+  // las 5 pantallas del nav, no solo desde Perfil/Temporada — antes había que
+  // acordarse de comprobarlo, o estar en una de esas dos pantallas para
+  // verlo (ver auditoría UX, heurística 1/6, Ronda 8). Se refresca en cada
+  // cambio de pantalla para que desaparezca en cuanto se responde la oferta.
+  useEffect(() => {
+    if (hidden || !session || session.user.isAnonymous) return
+    let cancelled = false
+    Promise.all([
+      fetch("/api/player").then((r) => r.json()).catch(() => null),
+      fetch("/api/market").then((r) => r.json()).catch(() => null),
+    ]).then(([playerData, marketData]) => {
+      if (cancelled) return
+      const clubOffers = playerData?.player?.state?.carrera?.mercado?.ofertasActivas?.length ?? 0
+      const realOffers = marketData?.myOfferCount ?? 0
+      setOfferCount(clubOffers + realOffers)
+    })
+    return () => { cancelled = true }
+  }, [session, pathname, hidden])
+
+  if (hidden) return null
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/95 backdrop-blur border-t border-gray-800 safe-area-pb">
       <div className="max-w-lg mx-auto flex items-center">
         {NAV_ITEMS.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/")
+          const showBadge = href === "/mercado" && offerCount > 0
           return (
             <button
               key={href}
@@ -82,7 +104,14 @@ export default function BottomNav() {
                 active ? "text-green-400" : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              {icon(active)}
+              <span className="relative">
+                {icon(active)}
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {offerCount > 9 ? "9+" : offerCount}
+                  </span>
+                )}
+              </span>
               <span className={`text-xs font-medium ${active ? "text-green-400" : "text-gray-600"}`}>{label}</span>
             </button>
           )

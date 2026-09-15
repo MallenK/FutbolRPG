@@ -18,6 +18,8 @@ import {
   getDivisionInfo,
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
+  formatRonda,
+  formatRondaCorta,
   type CopaState,
   type EuropaState,
   type SeleccionState,
@@ -85,6 +87,15 @@ const TIPO_LABELS: Record<string, string> = {
   EQUIPO: "Vestuario", ENTRENAMIENTO: "Entrenamiento", PERSONAL: "Personal",
 }
 
+const MODO_JUEGO_LABELS: Record<"completo" | "decisivos" | "simulado", string> = {
+  completo: "Completo", decisivos: "Decisivos", simulado: "Simulado",
+}
+const MODOS_JUEGO = [
+  { id: "completo" as const, label: "Completo", description: "Juegas todos los partidos tú mismo." },
+  { id: "decisivos" as const, label: "Decisivos", description: "Eliminatorias, selección y tramo final; el resto se simula." },
+  { id: "simulado" as const, label: "Simulado", description: "Toda la temporada se resuelve automáticamente." },
+]
+
 type SeasonPhase = "loading" | "no_season" | "event" | "paron" | "next_match" | "season_over" | "season_summary"
 
 type SeasonSummary = {
@@ -137,6 +148,8 @@ export default function SeasonPage() {
   const [autoSeasonStep, setAutoSeasonStep] = useState(0)
   const [retirado, setRetirado] = useState(false)
   const [requestingTransfer, setRequestingTransfer] = useState(false)
+  const [showModeSwitch, setShowModeSwitch] = useState(false)
+  const [changingModo, setChangingModo] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -249,6 +262,22 @@ export default function SeasonPage() {
       await loadPlayer()
     } finally {
       setRequestingTransfer(false)
+    }
+  }
+
+  const handleChangeModoJuego = async (nuevo: "completo" | "decisivos" | "simulado") => {
+    if (changingModo || playerState?.carrera.modoJuego === nuevo) { setShowModeSwitch(false); return }
+    setChangingModo(true)
+    try {
+      await fetch("/api/player/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modoJuego: nuevo }),
+      })
+      await loadPlayer()
+    } finally {
+      setChangingModo(false)
+      setShowModeSwitch(false)
     }
   }
 
@@ -480,6 +509,40 @@ export default function SeasonPage() {
           </button>
         </div>
 
+        {/* Cambio rápido de modo de juego, sin salir de la temporada — antes
+            solo se podía cambiar desde Ajustes, obligando a abandonar el
+            flujo de juego para acelerar o frenar el ritmo de una sesión
+            concreta (ver auditoría UX, heurística 7, Ronda 8). */}
+        {phase !== "no_season" && (
+          <div>
+            <button
+              onClick={() => setShowModeSwitch((v) => !v)}
+              className="text-xs text-gray-500 hover:text-white transition-colors"
+            >
+              Modo: <span className="text-gray-300 font-semibold">{MODO_JUEGO_LABELS[carrera.modoJuego ?? "completo"]}</span> {showModeSwitch ? "▴" : "▾"}
+            </button>
+            {showModeSwitch && (
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {MODOS_JUEGO.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleChangeModoJuego(m.id)}
+                    disabled={changingModo}
+                    className={`text-left p-2.5 rounded-lg border text-xs transition-colors disabled:opacity-60 ${
+                      carrera.modoJuego === m.id
+                        ? "bg-green-500/10 border-green-500 text-white"
+                        : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <p className="font-bold">{m.label}</p>
+                    <p className="text-gray-500 text-[10px] mt-0.5">{m.description}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Modo de juego "simulado": sustituye toda la UI de partido a
             partido/pestañas mientras la temporada esté en curso por un único
             botón que resuelve todo (eventos + partidos de cualquier
@@ -667,29 +730,48 @@ export default function SeasonPage() {
               </div>
             )}
 
-            {/* Contract / transfer request — vive dentro de la carrera, no en el navbar */}
+            {/* Contract / transfer request — vive dentro de la carrera, no en el navbar.
+                Las temporadas de contrato restantes se muestran aquí mismo, con el
+                mismo aviso de urgencia que ya tenía el dashboard — antes había que
+                salir de la temporada para verlas (ver informe-fallos.md, Ronda 8). */}
             {phase !== "no_season" && phase !== "season_summary" && (
-              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-white">Situación contractual</p>
-                  <p className="text-gray-500 text-xs mt-0.5 truncate">
-                    {mercado?.enLista
-                      ? "En lista de transferibles — a la espera de ofertas de clubes"
-                      : `${carrera.club} · Rep. ${carrera.reputacion}/100`}
-                  </p>
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white">Situación contractual</p>
+                    <p className="text-gray-500 text-xs mt-0.5 truncate">
+                      {mercado?.enLista
+                        ? "En lista de transferibles — a la espera de ofertas de clubes"
+                        : `${carrera.club} · Rep. ${carrera.reputacion}/100`}
+                    </p>
+                  </div>
+                  {mercado?.enLista ? (
+                    <span className="shrink-0 text-xs font-bold px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">
+                      EN LISTA
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleRequestTransfer}
+                      disabled={requestingTransfer}
+                      className="shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black font-bold rounded-lg text-xs transition-colors"
+                    >
+                      {requestingTransfer ? "Tramitando..." : "Solicitar traspaso"}
+                    </button>
+                  )}
                 </div>
-                {mercado?.enLista ? (
-                  <span className="shrink-0 text-xs font-bold px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">
-                    EN LISTA
-                  </span>
-                ) : (
-                  <button
-                    onClick={handleRequestTransfer}
-                    disabled={requestingTransfer}
-                    className="shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black font-bold rounded-lg text-xs transition-colors"
-                  >
-                    {requestingTransfer ? "Tramitando..." : "Solicitar traspaso"}
-                  </button>
+                {contrato && (
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-800">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                      contrato.temporadasRestantes <= 1
+                        ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                        : "bg-gray-800 text-gray-400 border-gray-700"
+                    }`}>
+                      {contrato.temporadasRestantes} temporada{contrato.temporadasRestantes !== 1 ? "s" : ""} de contrato
+                    </span>
+                    {contrato.temporadasRestantes <= 1 && (
+                      <span className="text-orange-400/80 text-xs">Expira pronto — decidirás tu futuro al cerrar la temporada</span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -722,7 +804,7 @@ export default function SeasonPage() {
                   <p className="text-yellow-300/60 text-xs">Tienes propuestas esperando respuesta</p>
                 </div>
                 <button
-                  onClick={() => router.push("/transfer")}
+                  onClick={() => router.push("/mercado")}
                   className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg text-xs transition-colors"
                 >
                   Ver →
@@ -758,7 +840,7 @@ export default function SeasonPage() {
                       {proximo.competicion}
                     </span>
                     <p className="text-xs text-gray-500 uppercase tracking-wider">
-                      {proximo.ronda} · {proximo.mes}
+                      {formatRonda(proximo.ronda)} · {proximo.mes}
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -1087,7 +1169,7 @@ function CalendarioTemporadaPanel({ carrera }: { carrera: PlayerState["carrera"]
                     <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${COMPETICION_COLORS[e.tipo as CompeticionTipo]}`}>
                       {e.competicionAbbr}
                     </span>
-                    <span className="text-gray-600 text-xs shrink-0">{e.ronda}</span>
+                    <span className="text-gray-600 text-xs shrink-0">{formatRondaCorta(e.ronda)}</span>
                     <span className={`truncate ${e.esProximo ? "text-white font-semibold" : "text-gray-300"}`}>
                       {e.esLocal ? "vs " : "@ "}{e.rival}
                     </span>
@@ -1388,7 +1470,7 @@ function CopaBracketPanel({ copa, club, esProximo }: { copa: CopaState; club: st
                   : failed ? "bg-red-500/20 text-red-400 border border-red-500/40"
                   : "bg-gray-800 text-gray-600"
                 }`}>
-                  {ronda}
+                  {formatRondaCorta(ronda)}
                 </div>
                 {i < COPA_RONDAS.length - 1 && (
                   <span className={`text-xs ${passed ? "text-green-600" : "text-gray-700"}`}>›</span>
@@ -1402,7 +1484,7 @@ function CopaBracketPanel({ copa, club, esProximo }: { copa: CopaState; club: st
         {!copa.eliminado && !copa.campeon && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
             <p className="text-xs text-gray-500 uppercase tracking-wider">
-              {rondaActual} · {copa.esLocal ? "En casa" : "Fuera"}
+              {formatRonda(rondaActual)} · {copa.esLocal ? "En casa" : "Fuera"}
             </p>
             <p className="text-lg font-black text-white">
               {copa.esLocal ? `${club} vs ${copa.rival}` : `${copa.rival} vs ${club}`}
@@ -1423,7 +1505,7 @@ function CopaBracketPanel({ copa, club, esProximo }: { copa: CopaState; club: st
         {copa.eliminado && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 text-center">
             <p className="text-gray-400 text-sm">
-              Eliminado en {copa.historial.at(-1)?.ronda ?? "fase anterior"} ante {copa.historial.at(-1)?.rival ?? "rival"}
+              Eliminado en {formatRonda(copa.historial.at(-1)?.ronda ?? "fase anterior")} ante {copa.historial.at(-1)?.rival ?? "rival"}
             </p>
           </div>
         )}
@@ -1436,7 +1518,7 @@ function CopaBracketPanel({ copa, club, esProximo }: { copa: CopaState; club: st
           {copa.historial.map((h, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 text-xs w-8">{h.ronda}</span>
+                <span className="text-gray-600 text-xs w-10">{formatRondaCorta(h.ronda)}</span>
                 <span className="text-gray-300">{h.rival}</span>
               </div>
               <div className="flex items-center gap-3">
@@ -1520,7 +1602,7 @@ function EuropaPanel({ europa, club, esProximo }: { europa: EuropaState; club: s
         {!nextGroupMatch && knockoutPending && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
             <p className="text-xs text-gray-500 uppercase tracking-wider">
-              {eliminatoriaRondas[el!.rondaIdx] ?? "Eliminatoria"} · {el!.esLocal ? "En casa" : "Fuera"}
+              {formatRonda(eliminatoriaRondas[el!.rondaIdx] ?? "Eliminatoria")} · {el!.esLocal ? "En casa" : "Fuera"}
             </p>
             <p className="text-lg font-black text-white">
               {el!.esLocal ? `${club} vs ${el!.rival}` : `${el!.rival} vs ${club}`}
@@ -1576,7 +1658,7 @@ function EuropaPanel({ europa, club, esProximo }: { europa: EuropaState; club: s
           {el!.historial.map((h, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 text-xs w-8">{h.ronda}</span>
+                <span className="text-gray-600 text-xs w-10">{formatRondaCorta(h.ronda)}</span>
                 <span className="text-gray-300">{h.rival}</span>
               </div>
               <div className="flex items-center gap-3">

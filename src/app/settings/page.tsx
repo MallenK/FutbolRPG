@@ -104,8 +104,6 @@ export default function SettingsPage() {
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [retiroConfirmed, setRetiroConfirmed] = useState(false)
-  const [retiroLoading, setRetiroLoading] = useState(false)
 
   const [apodo, setApodo] = useState("")
   const [dorsal, setDorsal] = useState(10)
@@ -212,16 +210,6 @@ export default function SettingsPage() {
     window.location.href = "/"
   }
 
-  async function handleRetirar() {
-    setRetiroLoading(true)
-    const res = await fetch("/api/legado/retirar", { method: "POST" })
-    if (res.ok) {
-      router.push("/legado")
-      return
-    }
-    setRetiroLoading(false)
-  }
-
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
     setProfileMsg(null)
@@ -294,7 +282,6 @@ export default function SettingsPage() {
   const totalPartidos = (statsCarrera?.partidosJugados ?? 0) + (statsTemporada?.partidosJugados ?? 0)
   const totalGoles = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
   const totalAsistencias = (statsCarrera?.asistencias ?? 0) + (statsTemporada?.asistencias ?? 0)
-  const historialTemporadas = player?.state.carrera.historialTemporadas ?? []
 
   return (
     <main className="min-h-screen bg-gray-950 text-white pb-24">
@@ -304,7 +291,7 @@ export default function SettingsPage() {
             onClick={() => router.push("/dashboard")}
             className="text-gray-500 hover:text-white text-sm transition-colors"
           >
-            ← Volver
+            ← Perfil
           </button>
           <h1 className="text-2xl font-black">
             Futbol<span className="text-green-400">RPG</span>
@@ -470,60 +457,21 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {historialTemporadas.length > 0 && (
-                <div className="pt-4 border-t border-gray-800 mb-4">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Historial de temporadas</p>
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                    {[...historialTemporadas].reverse().map((h) => (
-                      <div key={h.temporada} className="bg-gray-800/60 rounded-lg px-3 py-2.5 text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-white">Temporada {h.temporada}</span>
-                          {h.cambioDivision !== "ninguno" && (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              h.cambioDivision === "ascenso" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                            }`}>
-                              {h.cambioDivision === "ascenso" ? "▲ Ascenso" : "▼ Descenso"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-gray-500 text-xs mt-0.5">
-                          {h.club} · {h.liga} · {h.posicionFinal}º de {h.totalEquipos}
-                        </div>
-                        <div className="text-gray-400 text-xs mt-1">
-                          {h.stats.goles}G · {h.stats.asistencias}A · {h.stats.valoracionMedia.toFixed(1)} val.
-                          {h.premios.length > 0 && ` · ${h.premios.length} premio${h.premios.length > 1 ? "s" : ""}`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button onClick={handleExport} className={secondaryBtn}>
-                Exportar mis datos (JSON)
-              </button>
-
-              <div className="border-t border-gray-800 pt-4 mt-4">
-                <h3 className="text-orange-400 font-bold text-sm mb-2">Retirarse</h3>
-                <p className="text-gray-500 text-xs mb-3">
-                  Cierra esta carrera para siempre y pasa a tu <a href="/legado" className="underline hover:text-gray-300">Legado</a>.
-                  Después podrás crear un jugador nuevo. Tus estadísticas y premios quedan guardados, pero la carrera actual no se puede recuperar.
-                </p>
-                <label className="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={retiroConfirmed}
-                    onChange={(e) => setRetiroConfirmed(e.target.checked)}
-                    className="w-4 h-4 accent-orange-500"
-                  />
-                  Entiendo que esta carrera terminará
-                </label>
-                <button
-                  onClick={handleRetirar}
-                  disabled={!retiroConfirmed || retiroLoading}
-                  className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white font-bold text-sm rounded-lg transition-colors"
+              {/* El historial completo de temporadas (ascensos/descensos, premios
+                  por año) y la acción de "Retirarse" vivían aquí, mezclados con
+                  seguridad de cuenta y preferencias — progreso de carrera y una
+                  decisión de carrera no son ajustes de cuenta. El historial se
+                  movió al Perfil (bajo la vitrina de trofeos) y "Retirarse" a
+                  Legado, su destino natural (ver informe-fallos.md, Ronda 8). */}
+              <div className="flex gap-2">
+                <a
+                  href="/dashboard"
+                  className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-center font-medium text-sm rounded-lg transition-colors"
                 >
-                  {retiroLoading ? "Retirando..." : "Retirarme y empezar de nuevo"}
+                  Ver historial de temporadas
+                </a>
+                <button onClick={handleExport} className={`flex-1 ${secondaryBtn}`}>
+                  Exportar mis datos (JSON)
                 </button>
               </div>
             </section>

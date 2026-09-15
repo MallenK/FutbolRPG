@@ -119,6 +119,8 @@ export default function DashboardPage() {
   const [player, setPlayer] = useState<PlayerData | null>(null)
   const [loadingPlayer, setLoadingPlayer] = useState(true)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showHistorial, setShowHistorial] = useState(false)
+  const [showGloriaInfo, setShowGloriaInfo] = useState(false)
   const [upgrading, setUpgrading] = useState<string | null>(null)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [pendingOffers, setPendingOffers] = useState(0)
@@ -263,7 +265,7 @@ export default function DashboardPage() {
             )}
             {pendingOffers > 0 && (
               <button
-                onClick={() => router.push("/transfer")}
+                onClick={() => router.push("/mercado")}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-xs font-bold transition-colors hover:bg-yellow-500/20"
               >
                 {pendingOffers} oferta{pendingOffers > 1 ? "s" : ""} de club
@@ -338,9 +340,19 @@ export default function DashboardPage() {
                     <p className="text-green-400 text-sm mt-0.5 font-semibold">
                       {player.state.carrera.club} · {player.state.carrera.rol}
                     </p>
-                    <p className="text-yellow-400 text-sm mt-1 font-bold flex items-center gap-1">
+                    <button
+                      onClick={() => setShowGloriaInfo((v) => !v)}
+                      className="text-yellow-400 text-sm mt-1 font-bold flex items-center gap-1"
+                    >
                       🏆 {gloria} <span className="text-gray-500 font-normal text-xs">de gloria</span>
-                    </p>
+                      <span className="text-gray-600 text-xs">ⓘ</span>
+                    </button>
+                    {showGloriaInfo && (
+                      <p className="text-gray-500 text-xs mt-1 max-w-xs leading-relaxed">
+                        Se calcula con tus títulos (valen más ganados en divisiones humildes), ascensos, prestigio con
+                        la Selección Nacional y tu reputación acumulada — no solo con el nivel de tu jugador.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto shrink-0">
@@ -535,6 +547,47 @@ export default function DashboardPage() {
 
             {/* Vitrina de trofeos */}
             <TrophyShowcase historial={player.state.carrera.historialTemporadas ?? []} />
+
+            {/* Historial de temporadas — antes vivía en Ajustes, mezclado con
+                seguridad de cuenta; es progreso de carrera, no una preferencia
+                de configuración, así que se movió aquí (ver informe-fallos.md,
+                Ronda 8). Colapsado por defecto para no alargar el Perfil. */}
+            {(player.state.carrera.historialTemporadas?.length ?? 0) > 0 && (
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5">
+                <button
+                  onClick={() => setShowHistorial((v) => !v)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Historial de temporadas</h3>
+                  <span className="text-gray-500 text-xs font-bold">{showHistorial ? "Cerrar ↑" : "Ver todo →"}</span>
+                </button>
+                {showHistorial && (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1 mt-4">
+                    {[...(player.state.carrera.historialTemporadas ?? [])].reverse().map((h) => (
+                      <div key={h.temporada} className="bg-gray-800/60 rounded-lg px-3 py-2.5 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-white">Temporada {h.temporada}</span>
+                          {h.cambioDivision !== "ninguno" && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              h.cambioDivision === "ascenso" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                            }`}>
+                              {h.cambioDivision === "ascenso" ? "▲ Ascenso" : "▼ Descenso"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          {h.club} · {h.liga} · {h.posicionFinal}º de {h.totalEquipos}
+                        </div>
+                        <div className="text-gray-400 text-xs mt-1">
+                          {h.stats.goles}G · {h.stats.asistencias}A · {h.stats.valoracionMedia.toFixed(1)} val.
+                          {h.premios.length > 0 && ` · ${h.premios.length} premio${h.premios.length > 1 ? "s" : ""}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Season stats */}
             <div className="grid grid-cols-4 gap-3">
