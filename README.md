@@ -1,5 +1,7 @@
 # FutbolRPG
 
+**v0.2.0** — ver [`CHANGELOG.md`](CHANGELOG.md) para el historial de versiones y [`ROADMAP.md`](ROADMAP.md) para el estado de cada fase.
+
 Simulador de carrera futbolística estilo FIFA Career Mode combinado con un RPG narrativo por decisiones y dados. El jugador crea un futbolista, gestiona su carrera a lo largo de temporadas (partidos, mercado de fichajes, eventos narrativos) y compite de forma asíncrona con otros usuarios (leaderboard, feed, mercado).
 
 ## Stack

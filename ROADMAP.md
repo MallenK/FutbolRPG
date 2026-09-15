@@ -1,5 +1,7 @@
 # FutbolRPG — Roadmap de Desarrollo
 
+**Versión actual: 0.2.0** — ver [`CHANGELOG.md`](CHANGELOG.md) para el historial de versiones.
+
 ## Visión del Producto
 
 Simulador completo de carrera futbolística estilo FIFA Career Mode combinado con un juego de rol (RPG). El jugador toma decisiones durante y fuera de los partidos mediante un sistema de dados y cartas de decisión que afectan el desarrollo de su carrera. Debe ser lo más realista y completo posible, cubriendo todos los niveles del fútbol profesional.

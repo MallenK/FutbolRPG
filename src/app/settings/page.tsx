@@ -13,6 +13,7 @@ import VideoLoader from "@/components/VideoLoader"
 import { setReducedMotionOverride, getStoredReducedMotionOverride } from "@/lib/use-reduced-motion"
 import { setSoundOverride, isSoundEnabled, playSound } from "@/lib/sound"
 import type { SeasonHistoryEntry } from "@/lib/world"
+import { APP_VERSION } from "@/lib/version"
 
 type Preferencias = {
   reducirMovimiento?: boolean
@@ -622,6 +623,8 @@ export default function SettingsPage() {
                 }}
               />
             </section>
+
+            <p className="text-center text-gray-700 text-xs">FutbolRPG v{APP_VERSION}</p>
           </>
         )}
       </div>
