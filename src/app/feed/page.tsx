@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "@/lib/auth-client"
 
 const POSITION_LABELS: Record<string, string> = {
   GK: "POR", CB: "DFC", FB: "LAT",
@@ -159,14 +160,25 @@ function SeasonEndCard({ entry }: { entry: FeedEntry }) {
 
 export default function FeedPage() {
   const router = useRouter()
+  const { data: session, isPending } = useSession()
   const [entries, setEntries] = useState<FeedEntry[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Igual que en leaderboard: la actividad global solo es visible con una
+  // cuenta real, un invitado (isAnonymous) se manda a login.
   useEffect(() => {
+    if (isPending) return
+    if (!session || session.user.isAnonymous) router.push("/login")
+  }, [session, isPending, router])
+
+  useEffect(() => {
+    if (!session || session.user.isAnonymous) return
     fetch("/api/feed")
       .then((r) => r.json())
       .then(({ entries }) => { setEntries(entries ?? []); setLoading(false) })
-  }, [])
+  }, [session])
+
+  if (isPending || !session || session.user.isAnonymous) return null
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">

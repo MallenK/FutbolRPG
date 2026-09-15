@@ -18,6 +18,9 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Sesión de invitado (plugin `anonymous` de Better Auth, ver src/lib/auth.ts)
+  // -- un invitado no cuenta como "cuenta creada": ranking y actividad lo excluyen.
+  isAnonymous: boolean("is_anonymous").default(false),
   // Stripe: pago único que desbloquea el juego completo (ver src/lib/premium.ts)
   isPremium: boolean("is_premium").notNull().default(false),
   stripeCustomerId: text("stripe_customer_id"),

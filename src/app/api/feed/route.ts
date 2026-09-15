@@ -2,10 +2,14 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { activityLog, player } from "@/lib/schema"
 import { desc, eq, sql } from "drizzle-orm"
+import { requireRealAccount } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  const { error } = await requireRealAccount()
+  if (error) return error
+
   const rows = await db
     .select({ activityLog })
     .from(activityLog)

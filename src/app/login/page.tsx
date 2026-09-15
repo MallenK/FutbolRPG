@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [guestLoading, setGuestLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -30,6 +31,18 @@ export default function LoginPage() {
 
   async function handleGoogle() {
     await signIn.social({ provider: "google", callbackURL: "/dashboard" })
+  }
+
+  async function handleGuest() {
+    setError("")
+    setGuestLoading(true)
+    const { error } = await signIn.anonymous()
+    if (error) {
+      setError("No se pudo entrar como invitado. Inténtalo de nuevo.")
+      setGuestLoading(false)
+      return
+    }
+    router.push("/dashboard")
   }
 
   return (
@@ -100,6 +113,25 @@ export default function LoginPage() {
           <Link href="/register" className="text-green-400 hover:underline">
             Regístrate
           </Link>
+        </p>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-gray-800" />
+          <span className="text-gray-600 text-xs">o</span>
+          <div className="flex-1 h-px bg-gray-800" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGuest}
+          disabled={guestLoading}
+          className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 font-semibold rounded-lg transition-colors"
+        >
+          {guestLoading ? "Entrando..." : "Continuar como invitado"}
+        </button>
+        <p className="text-center text-gray-600 text-xs mt-2">
+          Modo invitado: puedes jugar tu carrera, pero el ranking y la actividad
+          global solo se ven con una cuenta.
         </p>
       </div>
     </main>
