@@ -1,0 +1,31 @@
+	Modelos generados con Meshy AI (www.meshy.ai) — plan gratuito
+
+	------------------------------
+
+	Licencia: Creative Commons Attribution 4.0 (CC BY 4.0)
+	https://creativecommons.org/licenses/by/4.0/
+
+	Los assets generados con una cuenta gratuita de Meshy se licencian bajo
+	CC BY 4.0, no en propiedad exclusiva (eso solo aplica a los planes de pago).
+	Se pueden usar con fines comerciales, compartir y adaptar, dando crédito
+	a Meshy.
+
+	Crédito usado en este proyecto: "3D models generated with Meshy AI
+	(meshy.ai)".
+
+	------------------------------
+
+	Esta nota cubre TODOS los archivos .glb de esta carpeta (y subcarpetas)
+	marcados con source: "meshy" en src/lib/models-3d.ts — no hace falta un
+	archivo de licencia por modelo.
+
+	Excepción: si un modelo concreto se generó a partir de una imagen de
+	referencia (no de un prompt de texto), el uso comercial de ESE modelo
+	depende también de tener derecho sobre esa imagen de origen, no solo de
+	esta licencia. Revisar caso por caso antes de activarlo en producción.
+
+	------------------------------
+
+	• Web:      www.meshy.ai
+	• Términos: www.meshy.ai/terms-of-use
+	• Ayuda:    help.meshy.ai/en/articles/9992001-can-i-use-my-generated-assets-for-commercial-projects
