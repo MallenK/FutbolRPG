@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "@/lib/auth-client"
 
 const POSITION_LABELS: Record<string, string> = {
   GK: "POR", CB: "DFC", FB: "LAT",
@@ -50,16 +51,28 @@ function RankBadge({ rank }: { rank: number }) {
 
 export default function LeaderboardPage() {
   const router = useRouter()
+  const { data: session, isPending } = useSession()
   const [category, setCategory] = useState<Category>("gloria")
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Ranking y actividad son las únicas páginas sociales de la app -- un
+  // invitado (isAnonymous, ver auth.ts) no cuenta como "cuenta creada", así
+  // que se le manda a login igual que a quien no tiene sesión.
   useEffect(() => {
+    if (isPending) return
+    if (!session || session.user.isAnonymous) router.push("/login")
+  }, [session, isPending, router])
+
+  useEffect(() => {
+    if (!session || session.user.isAnonymous) return
     setLoading(true)
     fetch(`/api/leaderboard?category=${category}`)
       .then((r) => r.json())
       .then(({ entries }) => { setEntries(entries ?? []); setLoading(false) })
-  }, [category])
+  }, [category, session])
+
+  if (isPending || !session || session.user.isAnonymous) return null
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">

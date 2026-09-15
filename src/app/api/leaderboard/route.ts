@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { player, user } from "@/lib/schema"
 import { eq, sql } from "drizzle-orm"
 import { calcularGloria, type SeasonHistoryEntry } from "@/lib/world"
+import { requireRealAccount } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
 
@@ -29,6 +30,9 @@ type LeaderboardEntry = {
 const GLORIA_FETCH_LIMIT = 500
 
 export async function GET(req: Request) {
+  const { error } = await requireRealAccount()
+  if (error) return error
+
   const { searchParams } = new URL(req.url)
   const category = searchParams.get("category") ?? "gloria"
 

@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth"
+import { anonymous } from "better-auth/plugins"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "./db"
 import { user, session, account, verification } from "./schema"
@@ -35,6 +36,10 @@ export const auth = betterAuth({
       },
     },
   } : {}),
+  // "Continuar como invitado" (login/page.tsx) -- sesión real de Better Auth
+  // pero marcada isAnonymous:true, para poder excluirla de ranking/actividad
+  // (ver requireRealAccount en src/lib/session.ts) sin tratarla como un login normal.
+  plugins: [anonymous({ generateName: () => "Invitado" })],
   user: {
     changeEmail: {
       enabled: true,
