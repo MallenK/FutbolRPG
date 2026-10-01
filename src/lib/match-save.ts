@@ -1,9 +1,11 @@
-import { db } from "@/lib/db"
-import { player, activityLog } from "@/lib/schema"
-import { eq } from "drizzle-orm"
-import { getPlayerByUserId } from "@/lib/players"
+import { activityLog } from "@/lib/schema"
+import type { PlayerRow } from "@/lib/player-store"
 import { pickRandomEvent, type PlayerContext, type CareerEvent } from "@/engine/career-events"
 import { createId } from "@/lib/id"
+import { simularResultadoPartido } from "@/engine/quick-sim"
+import { completarAutomatico, cuerpoDeGuardado, mapDbPlayer, partidoVigente, type PartidoEnCurso } from "@/lib/match-server"
+import type { Fixture } from "@/lib/fixtures"
+import { sanearMatchSave, hayPartidoPendiente, type MatchStatsSaneadas } from "@/lib/match-validation"
 import {
   advanceCopa,
   advanceEuropaGrupo,
@@ -20,27 +22,18 @@ import {
 } from "@/lib/world"
 
 type SimpleMatch = { valoracion: number; goles: number; asistencias: number; marcador: string }
-type Fixture = {
-  jornada: number; rival: string; esLocal: boolean; jugado: boolean
-  resultado: string | null; golesJugador: number; valoracion: number | null
-}
+type MatchStats = MatchStatsSaneadas
 
-type MatchStats = {
-  goles?: number
-  asistencias?: number
-  valoracion: number
-  marcador?: string
-  tarjetasAmarillas?: number
-  tarjetasRojas?: number
-}
-
+// Forma del body que envía el cliente (match/page.tsx) y las rutas de
+// simulación. Todo pasa por sanearMatchSave antes de tocar el estado.
 export type MatchSaveBody = {
-  matchStats: MatchStats
-  updatedState?: Record<string, unknown>
+  matchStats: Partial<MatchStats>
+  updatedState?: { fatiga?: number }
   tipo?: string
   ganado?: boolean
   golesRival?: number
   expulsado?: boolean
+  matchId?: string
 }
 
 const calculateMatchXP = (stats: MatchStats): number => {
@@ -51,19 +44,26 @@ const calculateMatchXP = (stats: MatchStats): number => {
   return Math.max(50, base + goalBonus + assistBonus + ratingBonus)
 }
 
+type Respuesta = { status: number; json: Record<string, unknown> }
+
+export type GuardadoPartido = Respuesta & {
+  // Solo presentes si el partido se aplica: estado nuevo y entrada de actividad.
+  state?: Record<string, unknown>
+  activity?: typeof activityLog.$inferInsert
+}
+
 // Toda la lógica de estado de "guardar un partido" (liga/copa/europa/selección):
 // actualiza estadísticas, XP/nivel, sanciones, reputación, moral, y hace avanzar
-// el bracket/grupo/torneo correspondiente. Se extrajo de api/match/save/route.ts
-// para poder reutilizarla también desde api/match/simulate/route.ts (modo de
-// juego "decisivos"/"simulado", ver ROADMAP) sin duplicar ~300 líneas.
-export async function performMatchSave(userId: string, body: MatchSaveBody): Promise<{ status: number; json: Record<string, unknown> }> {
-  const { matchStats, updatedState } = body
-  const tipo: string = body.tipo ?? "liga"
-  const ganado: boolean = body.ganado ?? false
-  const expulsado: boolean = body.expulsado ?? false
-
-  const found = await getPlayerByUserId(userId)
-  if (!found) return { status: 404, json: { error: "No player found" } }
+// el bracket/grupo/torneo correspondiente. Es una función pura sobre la fila
+// del jugador: la llaman performMatchSave (simulación) y /api/match/turn
+// (último turno del partido interactivo) dentro de su propia transacción.
+export function calcularGuardadoPartido(found: PlayerRow, body: MatchSaveBody | Record<string, unknown>): GuardadoPartido {
+  const userId = found.userId
+  const saneado = sanearMatchSave(body as Record<string, unknown>)
+  if ("error" in saneado) return { status: 400, json: { error: saneado.error } }
+  const { matchStats, tipo, ganado, expulsado, matchId } = saneado
+  // Del estado que manda el cliente solo se acepta la fatiga (ya recortada).
+  const updatedState = saneado.fatiga !== undefined ? { fatiga: saneado.fatiga } : {}
 
   const currentState = found.state as Record<string, unknown>
   const carrera = currentState.carrera as Record<string, unknown>
@@ -71,6 +71,17 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
 
   if (!statsTemporada || typeof statsTemporada.partidosJugados !== "number") {
     return { status: 500, json: { error: "Invalid player state" } }
+  }
+
+  // Reintento de un guardado que sí llegó (p. ej. se cortó la red al volver
+  // la respuesta): se responde como éxito sin aplicarlo otra vez. Sin esto, en
+  // liga el reintento se guardaba sobre la jornada siguiente.
+  if (matchId && carrera?.ultimoPartidoId === matchId) {
+    return { status: 200, json: { success: true, duplicate: true, stats: statsTemporada } }
+  }
+
+  if (!hayPartidoPendiente(tipo, carrera ?? {})) {
+    return { status: 409, json: { error: "no_pending_match", message: "No hay ningún partido pendiente de ese tipo." } }
   }
 
   const newStats = {
@@ -131,8 +142,6 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
   const currentRep = (carrera?.reputacion as number) ?? 10
   const repGain = Math.round((matchStats.valoracion - 6.0) * 2)
   const newRep = Math.max(0, Math.min(100, currentRep + repGain))
-
-  const updatedCarrera = ((updatedState as Record<string, unknown>)?.carrera as Record<string, unknown>) ?? {}
 
   // "Líder del Vestuario": +8 moral after every win
   const currentMoral = (currentState.moral as number) ?? 85
@@ -271,9 +280,14 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
     }
   }
 
+  // Un partido interactivo a medias del mismo tipo queda obsoleto: este
+  // partido ya se ha jugado (simulado o por turnos).
+  const partidoEnCurso = carrera?.partidoEnCurso as { tipo?: string } | null | undefined
+
   const newCarrera = {
     ...carrera,
-    ...updatedCarrera,
+    ...(matchId ? { ultimoPartidoId: matchId } : {}),
+    ...(partidoEnCurso?.tipo === tipo ? { partidoEnCurso: null } : {}),
     estadisticasTemporada: newStats,
     ultimosPartidos: newUltimosPartidos,
     jornadaActual,
@@ -297,16 +311,12 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
     carrera: newCarrera,
   }
 
-  await db.update(player)
-    .set({ state: newState, updatedAt: new Date() })
-    .where(eq(player.userId, userId))
-
   const fixturaActual = tipo === "liga"
     ? (fixtures.find((f: Fixture) => f.jornada === (jornadaActual - 1)))
     : undefined
   const rival = fixturaActual?.rival ?? (tipo === "copa" ? (carrera?.copa as CopaState)?.rival : "Desconocido") ?? "Desconocido"
 
-  await db.insert(activityLog).values({
+  const activity: typeof activityLog.$inferInsert = {
     id: createId(),
     userId,
     playerName: found.name,
@@ -323,9 +333,11 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
       leveled: newLevel > currentLevel,
       newLevel,
     },
-  })
+  }
 
   return {
+    state: newState,
+    activity,
     status: 200,
     json: {
       success: true,
@@ -334,4 +346,36 @@ export async function performMatchSave(userId: string, body: MatchSaveBody): Pro
       eventoGenerado: !!eventoActual,
     },
   }
+}
+
+// ─── Partidos resueltos sin interacción ──────────────────────────────────────
+
+// Partido simulado con el modelo de atributos (quick-sim), para los modos
+// "decisivos" y "simulado".
+export function simularYCalcular(row: PlayerRow, tipo: string): GuardadoPartido {
+  const state = row.state as Record<string, unknown>
+  const forma = (state.forma as number) ?? 80
+  const fatiga = (state.fatiga as number) ?? 0
+  const sim = simularResultadoPartido(row.position, row.attributes as Parameters<typeof simularResultadoPartido>[1], forma, fatiga)
+  const traits = (state.traits as string[]) ?? []
+  const fatigaGanada = traits.includes("fisico_excepcional") ? 20 * 0.75 : 20
+  const r = calcularGuardadoPartido(row, {
+    tipo,
+    matchStats: sim.matchStats,
+    expulsado: sim.expulsado,
+    updatedState: { fatiga: Math.min(100, fatiga + fatigaGanada) },
+  })
+  return { ...r, json: { ...r.json, simulado: true, matchStats: sim.matchStats, ganado: sim.ganado } }
+}
+
+// Si hay un partido interactivo a medias y todavía vigente, lo termina
+// eligiendo la mejor opción en cada turno que falte. Evita que el modo
+// "Simulado" (o simular el mismo partido) deje un partido fantasma.
+export function completarEnCursoYCalcular(row: PlayerRow): GuardadoPartido | null {
+  const carrera = ((row.state as Record<string, unknown>).carrera ?? {}) as Record<string, unknown>
+  const partido = carrera.partidoEnCurso as PartidoEnCurso | null | undefined
+  if (!partidoVigente(partido, carrera)) return null
+  const jugador = mapDbPlayer(row)
+  const terminado = completarAutomatico(partido, jugador)
+  return calcularGuardadoPartido(row, cuerpoDeGuardado(terminado, jugador))
 }

@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
-import { type CareerEvent, type OpcionEvento, getEventById, pickAutoOpcion } from "@/engine/career-events"
-import { getDivisionInfo, generateTransferOffers, type ContratoState, type MercadoState } from "@/lib/world"
-import { retirarJugador } from "@/lib/legado"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { readJson } from "@/lib/http"
+import type { CareerEvent } from "@/engine/career-events"
+import { retirarJugadorEnTx } from "@/lib/legado"
+import {
+  aplicarOpcionEvento,
+  elegirOpcionAutomatica,
+  esOpcionDeRetiro,
+  flattenAttributes,
+} from "@/lib/career-event-apply"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { opcionId, auto } = await req.json() as { opcionId?: string; auto?: boolean }
+  const body = await readJson<{ opcionId: string; auto: boolean }>(req)
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  const { opcionId, auto } = body
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
@@ -24,158 +28,29 @@ export async function POST(req: NextRequest) {
   if (!evento) return NextResponse.json({ error: "No pending event" }, { status: 400 })
 
   const opcion = auto
-    ? pickAutoOpcion(evento, (() => {
-        const attrs = found.attributes as Record<string, Record<string, number>>
-        return { ...attrs?.tecnicos, ...attrs?.fisicos, ...attrs?.tacticos, ...attrs?.mentales }
-      })())
-    : evento.opciones.find((o: OpcionEvento) => o.id === opcionId)
+    ? elegirOpcionAutomatica(evento, flattenAttributes(found.attributes))
+    : evento.opciones.find((o) => o.id === opcionId)
   if (!opcion) return NextResponse.json({ error: "Invalid option" }, { status: 400 })
 
   // Retiro definitivo: en vez de aplicar los efectos normales, se archiva la
-  // carrera entera en el Legado y se borra el jugador. No tiene sentido
-  // seguir actualizando state después de esto (la fila va a desaparecer).
-  if (evento.id === "retiro_forzado" && opcion.id === "retirarse") {
-    const result = await retirarJugador(session.user.id)
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 404 })
+  // carrera entera en el Legado y se borra el jugador.
+  if (esOpcionDeRetiro(evento, opcion)) {
+    await retirarJugadorEnTx(tx, found)
     return NextResponse.json({ success: true, narrativo: opcion.narrativo, retirado: true })
   }
 
-  const fx = opcion.efectos
+  const newState = aplicarOpcionEvento(state, evento, opcion)
 
-  const clamp = (val: number, min = 0, max = 100) => Math.max(min, Math.min(max, val))
-
-  const currentMoral = (state.moral as number) ?? 85
-  const currentForma = (state.forma as number) ?? 80
-  const currentFatiga = (state.fatiga as number) ?? 0
-  const currentRiesgo = (state.riesgoLesion as number) ?? 5
-  const currentRep = (carrera.reputacion as number) ?? 10
-  const currentDivision = (carrera.divisionActual as number) ?? 3
-  const currentAttrPoints = (state.attributePoints as number) ?? 0
-  const currentTraits = (state.traits as string[]) ?? []
-
-  const currentConfianza = (state.confianza as Record<string, number>) ?? {}
-
-  // "Mentalidad de Acero": press events never lower morale (other effects still apply)
-  const inmuneAPrensaNegativa = evento.tipo === "PRENSA" && currentTraits.includes("mentalidad_acero")
-  const moralDelta = inmuneAPrensaNegativa ? Math.max(0, fx.moral ?? 0) : (fx.moral ?? 0)
-
-  const newConfianza = {
-    ...currentConfianza,
-    entrenador: clamp((currentConfianza.entrenador ?? 60) + (fx.confianza_entrenador ?? 0)),
-    vestuario: clamp((currentConfianza.vestuario ?? 50) + (fx.confianza_vestuario ?? 0)),
-  }
-
-  // Handle transfer — resolve dynamic placeholders for "next division" transfers
-  let newCarreraFields: Record<string, unknown> = {}
-  if (fx.transferirA) {
-    let { club, liga, rol, division } = fx.transferirA
-
-    if (division === -1) division = Math.min(5, currentDivision + 1)
-
-    if (club === "__NEXT_DIVISION_CLUB__" || liga === "__NEXT_DIVISION_NAME__") {
-      const targetInfo = getDivisionInfo(division)
-      club = targetInfo.clubes[Math.floor(Math.random() * targetInfo.clubes.length)]
-      liga = targetInfo.nombre
-    }
-
-    newCarreraFields = { club, liga, rol, divisionActual: division }
-  }
-
-  // Handle selección nacional
-  if (fx.seleccionConvocado) {
-    newCarreraFields = { ...newCarreraFields, enSeleccion: true }
-  }
-
-  // Renegociación de contrato: la decisión del evento decide de verdad
-  // cuántas temporadas quedan, en vez de que se renueve solo en silencio al
-  // cerrar la temporada sin importar qué se eligiera (ver informe-fallos.md,
-  // Ronda 6, hallazgo M3).
-  if (fx.contratoTemporadas != null) {
-    const currentContrato = carrera.contrato as ContratoState | undefined
-    const newContrato: ContratoState = {
-      temporadasRestantes: fx.contratoTemporadas,
-      salarioRelativo: currentContrato?.salarioRelativo ?? 2,
-    }
-    newCarreraFields = { ...newCarreraFields, contrato: newContrato }
-  }
-
-  // "Explorar el mercado": pone al jugador en la lista de transferibles del
-  // mercado NPC de verdad, con ofertas reales generadas ya — mismo mecanismo
-  // que "Solicitar traspaso" en /transfer, en vez del texto sin efecto que
-  // era antes.
-  if (fx.activarMercado) {
-    const currentMercado = carrera.mercado as MercadoState | undefined
-    const jornadaActual = (carrera.jornadaActual as number) ?? 1
-    const currentClub = (carrera.club as string) ?? ""
-    const newOffers = generateTransferOffers(currentRep, currentDivision, currentClub, jornadaActual)
-    const newMercado: MercadoState = {
-      enLista: true,
-      ofertasActivas: [...(currentMercado?.ofertasActivas ?? []), ...newOffers],
-      ultimaActualizacion: jornadaActual,
-    }
-    newCarreraFields = { ...newCarreraFields, mercado: newMercado }
-  }
-
-  // Track resolved event ids to avoid repetition
-  const resolvedIds = (carrera.eventosResueltos as string[]) ?? []
-  const newResolvedIds = resolvedIds.includes(evento.id)
-    ? resolvedIds
-    : [...resolvedIds, evento.id]
-
-  // Arc chaining: if option has seguimientoEventoId, queue that event next
   const arcEvento = opcion.seguimientoEventoId
-    ? (getEventById(opcion.seguimientoEventoId) ?? null)
+    ? (newState.carrera as { eventoActual: CareerEvent | null }).eventoActual
     : null
 
-  // Sin evento de arco, el siguiente evento sale de la cola de eventos
-  // pendientes (ráfaga generada fuera de partido, ver match/save/route.ts)
-  // en vez de esperar al próximo partido — así varios eventos de carrera
-  // pueden encadenarse seguidos.
-  const pendientes = (carrera.eventosPendientes as CareerEvent[]) ?? []
-  const nextFromQueue = pendientes[0] ?? null
-  const remainingQueue = pendientes.slice(1)
-
-  const nextEvento = arcEvento ?? nextFromQueue
-
-  const newCarrera = {
-    ...carrera,
-    ...newCarreraFields,
-    reputacion: clamp(currentRep + (fx.reputacion ?? 0)),
-    eventoActual: nextEvento,
-    eventosPendientes: arcEvento ? pendientes : remainingQueue,
-    eventosResueltos: newResolvedIds,
-  }
-
-  // Trait mutations
-  let newTraits = [...currentTraits]
-  if (fx.addTrait && !newTraits.includes(fx.addTrait)) {
-    newTraits = [...newTraits, fx.addTrait]
-  }
-  if (fx.removeTrait) {
-    newTraits = newTraits.filter((t) => t !== fx.removeTrait)
-  }
-
-  const newState = {
-    ...state,
-    moral: clamp(currentMoral + moralDelta),
-    forma: clamp(currentForma + (fx.forma ?? 0)),
-    fatiga: clamp(currentFatiga + (fx.fatiga ?? 0)),
-    riesgoLesion: clamp(currentRiesgo + (fx.riesgoLesion ?? 0)),
-    attributePoints: currentAttrPoints + (fx.attributePoints ?? 0),
-    traits: newTraits,
-    confianza: newConfianza,
-    carrera: newCarrera,
-  }
-
-  await db.update(player)
-    .set({ state: newState, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({
+  return { state: newState, result: NextResponse.json({
     success: true,
     narrativo: opcion.narrativo,
-    efectos: fx,
-    transferred: !!fx.transferirA,
+    efectos: opcion.efectos,
+    transferred: !!opcion.efectos.transferirA,
     arcEvent: arcEvento ? { id: arcEvento.id, titulo: arcEvento.titulo } : null,
+  }) }
   })
 }

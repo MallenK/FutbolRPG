@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player, activityLog } from "@/lib/schema"
-import { eq } from "drizzle-orm"
+import { activityLog } from "@/lib/schema"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
 import { createId } from "@/lib/id"
+import { generateFixtures, ligaTerminada, type Fixture } from "@/lib/fixtures"
 import { seasonLimitReached, seleccionLocked, FREE_SEASON_LIMIT } from "@/lib/premium"
 import {
   getRivales,
+  generateContrato,
   getDivisionInfo,
   generateCopaState,
   generateEuropaState,
@@ -23,11 +23,6 @@ import {
   type SeasonHistoryEntry,
 } from "@/lib/world"
 
-type Fixture = {
-  jornada: number; rival: string; esLocal: boolean; jugado: boolean
-  resultado: string | null; golesJugador: number; valoracion: number | null
-}
-
 const ROL_ORDEN = ["Reserva", "Rotación", "Titular", "Estrella"] as const
 type Rol = typeof ROL_ORDEN[number]
 
@@ -35,17 +30,6 @@ function nextRol(rol: Rol, up: boolean): Rol {
   const idx = ROL_ORDEN.indexOf(rol)
   if (up) return ROL_ORDEN[Math.min(idx + 1, ROL_ORDEN.length - 1)]
   return ROL_ORDEN[Math.max(idx - 1, 0)]
-}
-
-function generateFixtures(rivals: string[]): Fixture[] {
-  const opponents = rivals.slice(0, 8)
-  const raw: Omit<Fixture, "jornada">[] = []
-  for (const rival of opponents) {
-    raw.push({ rival, esLocal: true,  jugado: false, resultado: null, golesJugador: 0, valoracion: null })
-    raw.push({ rival, esLocal: false, jugado: false, resultado: null, golesJugador: 0, valoracion: null })
-  }
-  raw.sort(() => Math.random() - 0.5)
-  return raw.map((f, i) => ({ ...f, jornada: i + 1 }))
 }
 
 function calcularPremios(
@@ -84,8 +68,7 @@ export async function POST() {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
@@ -93,10 +76,20 @@ export async function POST() {
   const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
   const temporadaActual = (carrera.temporada as number) ?? 1
   if (seasonLimitReached(temporadaActual, isPremium)) {
-    return NextResponse.json({
+    return { result: NextResponse.json({
       error: "premium_required",
       message: `Has llegado al límite de ${FREE_SEASON_LIMIT} temporadas del plan gratuito. Hazte Premium para continuar tu carrera.`,
-    }, { status: 402 })
+    }, { status: 402 }) }
+  }
+
+  // Sin esta comprobación, un doble clic en "Terminar temporada" (o llamadas
+  // repetidas a la API) cerraba varias temporadas seguidas sin jugarlas:
+  // tras cerrar una, la siguiente empieza con 16 jornadas sin jugar.
+  if (!ligaTerminada(carrera.fixtures as Fixture[] | undefined)) {
+    return { result: NextResponse.json({
+      error: "season_not_finished",
+      message: "La liga todavía tiene jornadas por jugar.",
+    }, { status: 409 }) }
   }
 
   const statsTemporada = carrera.estadisticasTemporada as Record<string, number>
@@ -157,7 +150,8 @@ export async function POST() {
   const contratoRestantes = (contratoState?.temporadasRestantes ?? 2) - 1
   const contratoExpirando = contratoRestantes <= 0
   const newContrato: ContratoState = contratoExpirando
-    ? { temporadasRestantes: 2, salarioRelativo: contratoState?.salarioRelativo ?? 2 }
+    // Renovación: el salario se renegocia con la división y reputación actuales.
+    ? generateContrato((carrera.divisionActual as number) ?? 3, (carrera.reputacion as number) ?? 10)
     : { ...(contratoState ?? { temporadasRestantes: 2, salarioRelativo: 2 }), temporadasRestantes: contratoRestantes }
 
   // Retirement check: generate retirement event at age 37+
@@ -322,6 +316,10 @@ export async function POST() {
     // Las amarillas de una temporada no arrastran sanción a la siguiente —
     // mismo criterio que en el fútbol real.
     sancion: { partidosRestantes: 0 },
+    // Un partido interactivo a medias de la temporada que se cierra ya no
+    // existe, y su último turno (con el log completo) deja de ocupar sitio.
+    partidoEnCurso: null,
+    ultimoTurno: null,
   }
 
   const newState = {
@@ -331,13 +329,10 @@ export async function POST() {
     carrera: newCarrera,
   }
 
-  await db.update(player)
-    .set({ state: newState, age: newAge, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
 
   const subioRol = newRol !== currentRol && ROL_ORDEN.indexOf(newRol) > ROL_ORDEN.indexOf(currentRol)
 
-  await db.insert(activityLog).values({
+  await tx.insert(activityLog).values({
     id: createId(),
     userId: session.user.id,
     playerName: found.name,
@@ -360,7 +355,7 @@ export async function POST() {
     },
   })
 
-  return NextResponse.json({
+  return { state: newState, columns: { age: newAge }, result: NextResponse.json({
     success: true,
     resumen: {
       temporada: newTemporada - 1,
@@ -393,5 +388,6 @@ export async function POST() {
       },
       edadRetiro: newAge >= 37,
     },
+  }) }
   })
 }

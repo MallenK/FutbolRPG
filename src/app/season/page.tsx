@@ -19,6 +19,7 @@ import {
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
   formatRonda,
+  formatSalario,
   formatRondaCorta,
   type CopaState,
   type EuropaState,
@@ -767,6 +768,9 @@ export default function SeasonPage() {
                         : "bg-gray-800 text-gray-400 border-gray-700"
                     }`}>
                       {contrato.temporadasRestantes} temporada{contrato.temporadasRestantes !== 1 ? "s" : ""} de contrato
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      Salario <span className="text-white font-semibold">{formatSalario(contrato.salarioRelativo)}</span>
                     </span>
                     {contrato.temporadasRestantes <= 1 && (
                       <span className="text-orange-400/80 text-xs">Expira pronto — decidirás tu futuro al cerrar la temporada</span>

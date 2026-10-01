@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { resolveDecision, resolveStatValue } from "./decision"
-import { createDefaultPlayer } from "./player"
+import { jugadorDePrueba } from "@/lib/test-fixtures"
 import { DecisionOption, DecisionContext } from "./types"
 
 const baseContext: DecisionContext = {
@@ -19,7 +19,7 @@ const optionFor = (statPrincipal: string, pesoStat = 1, riesgo = 0.1): DecisionO
 
 describe("resolveStatValue", () => {
   it("encuentra el stat en el grupo correcto (técnico/físico/táctico/mental)", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     expect(resolveStatValue("tiro", player)).toBe(player.tecnicos.tiro)
     expect(resolveStatValue("velocidad", player)).toBe(player.fisicos.velocidad)
     expect(resolveStatValue("vision", player)).toBe(player.tacticos.vision)
@@ -27,14 +27,14 @@ describe("resolveStatValue", () => {
   })
 
   it("devuelve 50 por defecto si el stat no existe", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     expect(resolveStatValue("stat_inexistente", player)).toBe(50)
   })
 })
 
 describe("resolveDecision", () => {
   it("el score siempre queda acotado entre 0 y 100", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     for (let i = 0; i < 200; i++) {
       const { score } = resolveDecision(optionFor("tiro"), player, baseContext)
       expect(score).toBeGreaterThanOrEqual(0)
@@ -43,10 +43,10 @@ describe("resolveDecision", () => {
   })
 
   it("un jugador con stat alto rinde mejor en promedio que uno con stat bajo", () => {
-    const fuerte = createDefaultPlayer()
+    const fuerte = jugadorDePrueba()
     fuerte.tecnicos.tiro = 95
 
-    const debil = createDefaultPlayer()
+    const debil = jugadorDePrueba()
     debil.tecnicos.tiro = 20
 
     const N = 300
@@ -60,7 +60,7 @@ describe("resolveDecision", () => {
   })
 
   it("mayor dificultad reduce el score medio", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     const facil: DecisionContext = { ...baseContext, dificultadBase: 10 }
     const dificil: DecisionContext = { ...baseContext, dificultadBase: 80 }
 
@@ -75,10 +75,10 @@ describe("resolveDecision", () => {
   })
 
   it("la fatiga alta penaliza el score medio", () => {
-    const descansado = createDefaultPlayer()
+    const descansado = jugadorDePrueba()
     descansado.estado.fatiga = 0
 
-    const cansado = createDefaultPlayer()
+    const cansado = jugadorDePrueba()
     cansado.estado.fatiga = 90
 
     const N = 300
@@ -92,7 +92,7 @@ describe("resolveDecision", () => {
   })
 
   it("devuelve siempre un resultado válido del enum ResultadoDecision", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     const validos = ["PERFECTO", "EXITO", "PARCIAL", "FALLO", "CRITICO_FALLO"]
     for (let i = 0; i < 50; i++) {
       const { resultado } = resolveDecision(optionFor("tiro"), player, baseContext)

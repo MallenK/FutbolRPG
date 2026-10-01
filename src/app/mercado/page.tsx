@@ -63,8 +63,15 @@ const ROL_COLOR: Record<string, string> = {
 }
 
 export default function MercadoPage() {
-  const { data: session } = useSession()
+  const { data: session, isPending } = useSession()
   const router = useRouter()
+
+  // Igual que el resto de pantallas privadas: sin sesión, al login. Antes
+  // /mercado se quedaba abierta y petaba ("Application error") al intentar
+  // pintar la respuesta 401 de /api/market como si fueran datos.
+  useEffect(() => {
+    if (!isPending && !session) router.push("/login")
+  }, [session, isPending, router])
 
   // ─── Mercado entre jugadores reales (transferListing/transferOffer) ───────
   const [data, setData] = useState<MarketData | null>(null)
@@ -73,6 +80,8 @@ export default function MercadoPage() {
   const [offeringId, setOfferingId] = useState<string | null>(null)
   const [respondingId, setRespondingId] = useState<string | null>(null)
   const [confirmAcceptId, setConfirmAcceptId] = useState<string | null>(null)
+  // Invitados: el mercado entre usuarios exige cuenta real (la API responde 401).
+  const [requiereCuenta, setRequiereCuenta] = useState(false)
 
   // ─── Ofertas de tu club (carrera.mercado, NPC — antes vivían en /transfer,
   // fusionadas aquí: son la otra mitad de "tengo ofertas de fichaje", y
@@ -83,12 +92,19 @@ export default function MercadoPage() {
   const [clubActionLoading, setClubActionLoading] = useState<string | null>(null)
   const [confirmClubOfferId, setConfirmClubOfferId] = useState<string | null>(null)
   const [transferResult, setTransferResult] = useState<{ club: string; liga: string; rol: string } | null>(null)
+  const [clubAviso, setClubAviso] = useState<string | null>(null)
 
   const fetchMarket = useCallback(() => {
     setLoading(true)
     fetch("/api/market")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false) })
+      .then(async (r) => {
+        // Solo se guardan datos válidos: una respuesta de error ({ error })
+        // no tiene `listings` ni `pendingOffers` y rompía el render.
+        if (r.ok) setData(await r.json())
+        else if (r.status === 401) setRequiereCuenta(true)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   const fetchClubMarket = useCallback(() => {
@@ -99,7 +115,7 @@ export default function MercadoPage() {
       .catch(() => setClubLoading(false))
   }, [])
 
-  useEffect(() => { fetchMarket() }, [fetchMarket])
+  useEffect(() => { if (session) fetchMarket() }, [session, fetchMarket])
   useEffect(() => { if (session) fetchClubMarket() }, [session, fetchClubMarket])
 
   const handleToggle = async () => {
@@ -157,7 +173,8 @@ export default function MercadoPage() {
       body: JSON.stringify({ action: "requestTransfer" }),
     })
     const d = await res.json()
-    setClubMarket((prev) => prev ? { ...prev, mercado: d.mercado } : prev)
+    setClubAviso(d.message ?? null)
+    if (d.mercado) setClubMarket((prev) => prev ? { ...prev, mercado: d.mercado } : prev)
     setClubActionLoading(null)
   }
 
@@ -169,7 +186,8 @@ export default function MercadoPage() {
       body: JSON.stringify({ action: "refreshOffers" }),
     })
     const d = await res.json()
-    setClubMarket((prev) => prev ? { ...prev, mercado: d.mercado } : prev)
+    setClubAviso(d.message ?? null)
+    if (d.mercado) setClubMarket((prev) => prev ? { ...prev, mercado: d.mercado } : prev)
     setClubActionLoading(null)
   }
 
@@ -189,6 +207,7 @@ export default function MercadoPage() {
       body: JSON.stringify({ offerId, action }),
     })
     const d = await res.json()
+    setClubAviso(d.message ?? null)
     if (action === "accept" && d.success) {
       setTransferResult({ club: d.transfer.club, liga: d.transfer.liga, rol: d.transfer.rol })
     } else {
@@ -348,6 +367,9 @@ export default function MercadoPage() {
                 >
                   {clubActionLoading === "refresh" ? "Actualizando..." : "Actualizar ofertas →"}
                 </button>
+                {clubAviso && (
+                  <p role="status" className="text-xs text-orange-300">{clubAviso}</p>
+                )}
               </div>
             )}
           </div>
@@ -359,7 +381,13 @@ export default function MercadoPage() {
               <p className="text-gray-500 text-sm">Fichajes reales con otros usuarios de FutbolRPG.</p>
             </div>
 
-            {loading ? (
+            {requiereCuenta ? (
+              <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5 space-y-2">
+                <p className="text-white text-sm font-semibold">Necesitas una cuenta para fichar con otros jugadores.</p>
+                <p className="text-gray-500 text-xs">Como invitado puedes jugar tu carrera y recibir ofertas de clubes, pero el mercado entre usuarios, el ranking y la actividad son solo para cuentas registradas.</p>
+                <a href="/register" className="inline-block mt-1 px-4 py-2 bg-green-500 hover:bg-green-400 text-black text-sm font-bold rounded-lg">Crear cuenta</a>
+              </div>
+            ) : loading ? (
               <div className="py-16 text-center text-gray-500">Cargando mercado...</div>
             ) : (
               <div className="space-y-6">

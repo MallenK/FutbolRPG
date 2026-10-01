@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
 import { simularPartidoSancion } from "@/lib/world"
-
-type Fixture = {
-  jornada: number; rival: string; esLocal: boolean; jugado: boolean
-  resultado: string | null; golesJugador: number; valoracion: number | null
-}
+import type { Fixture } from "@/lib/fixtures"
 
 // Resuelve el partido de liga de la jornada actual cuando el jugador está
 // sancionado (roja o 5 amarillas acumuladas, ver api/match/save/route.ts) —
@@ -20,8 +13,7 @@ export async function POST() {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
@@ -50,9 +42,6 @@ export async function POST() {
     sancion: { partidosRestantes: sancion.partidosRestantes - 1 },
   }
 
-  await db.update(player)
-    .set({ state: { ...state, carrera: newCarrera }, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({ success: true, resultado, marcador })
+  return { state: { ...state, carrera: newCarrera }, result: NextResponse.json({ success: true, resultado, marcador }) }
+  })
 }

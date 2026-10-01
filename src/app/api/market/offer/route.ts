@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { transferListing, transferOffer } from "@/lib/schema"
 import { eq, and } from "drizzle-orm"
-import { requireSession } from "@/lib/session"
+import { requireRealAccount } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
+import { readJson } from "@/lib/http"
 import { mercadoLocked } from "@/lib/premium"
 import { getUserContactByUserId } from "@/lib/players"
 import { sendOfferReceivedEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, error } = await requireRealAccount()
   if (error) return error
 
   const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false
@@ -18,8 +19,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "premium_required", message: "El mercado de fichajes entre usuarios es una función Premium." }, { status: 402 })
   }
 
-  const { listingId } = await req.json()
-  if (!listingId) return NextResponse.json({ error: "Missing listingId" }, { status: 400 })
+  const body = await readJson<{ listingId: string }>(req)
+  const listingId = body?.listingId
+  if (typeof listingId !== "string" || !listingId) return NextResponse.json({ error: "Missing listingId" }, { status: 400 })
 
   const found = await getPlayerByUserId(session.user.id)
   if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })

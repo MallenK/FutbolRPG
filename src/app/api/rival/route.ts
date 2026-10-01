@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
+import { mutatePlayerOr404 } from "@/lib/player-store"
 import { getPlayerByUserId, getPlayerById, getComparableStats, isPerfilPublicoOculto } from "@/lib/players"
+import { readJson } from "@/lib/http"
 
 export async function GET() {
   const { session, error } = await requireSession()
@@ -32,10 +31,11 @@ export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { rivalId } = await req.json() as { rivalId: string | null }
+  const body = await readJson<{ rivalId: string | null }>(req)
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  const rivalId = typeof body.rivalId === "string" ? body.rivalId : null
 
-  const me = await getPlayerByUserId(session.user.id)
-  if (!me) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (me, tx) => {
 
   if (rivalId) {
     if (rivalId === me.id) {
@@ -46,9 +46,6 @@ export async function POST(req: NextRequest) {
   }
 
   const state = { ...(me.state as Record<string, unknown>), rivalId: rivalId ?? undefined }
-  await db.update(player)
-    .set({ state, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({ success: true, rivalId: rivalId ?? null })
+  return { state, result: NextResponse.json({ success: true, rivalId: rivalId ?? null }) }
+  })
 }

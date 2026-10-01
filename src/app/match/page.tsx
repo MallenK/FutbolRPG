@@ -15,23 +15,12 @@ const FieldScene = dynamic(() => import("@/components/FieldScene"), {
 })
 import {
   initMatchState,
-  getSituacionForTurn,
-  resolveDecisionWithDice,
   type InteractiveMatchState,
   type Situacion,
   type TurnResult,
 } from "@/engine/match-interactive"
-import {
-  type Player,
-  type DecisionOption,
-  type StatsTecnicos,
-  type StatsFisicos,
-  type StatsTacticos,
-  type StatsMentales,
-  type Confianza,
-  type Carrera,
-  Posicion,
-} from "@/engine/types"
+import { type Player, type DecisionOption, Posicion } from "@/engine/types"
+import type { MatchContext, RespuestaTurno } from "@/lib/match-server"
 import { resolveStatValue } from "@/engine/decision"
 import { getMatchNarrative } from "@/lib/narrative"
 import { getResultLabel } from "@/lib/result-display"
@@ -41,98 +30,7 @@ import { NATIONALITY_FLAGS } from "@/lib/player-config"
 const RESULT_SOUND: Record<string, SoundName> = {
   PERFECTO: "perfecto", EXITO: "exito", PARCIAL: "parcial", FALLO: "fallo", CRITICO_FALLO: "critico_fallo",
 }
-import {
-  COPA_RONDAS,
-  EUROPA_COMPETICION_LABELS,
-  formatRonda,
-  type CopaState,
-  type EuropaState,
-  type SeleccionState,
-} from "@/lib/world"
-
-type Phase = "loading" | "error" | "situation" | "rolling" | "result" | "saving" | "finished"
-
-type DbPlayer = {
-  id: string
-  name: string
-  position: string
-  nationality: string
-  age: number
-  attributes: unknown
-  state: unknown
-}
-
-type MatchContext = {
-  tipo: "liga" | "copa" | "europa" | "seleccion" | "seleccion_torneo"
-  rival: string
-  esLocal: boolean
-  club: string
-  competicion: string
-  ronda: string
-}
-
-function mapDbPlayer(dbPlayer: DbPlayer): Player {
-  const attrs = dbPlayer.attributes as {
-    tecnicos: StatsTecnicos
-    fisicos: StatsFisicos
-    tacticos: StatsTacticos
-    mentales: StatsMentales
-  }
-  const state = dbPlayer.state as {
-    fatiga: number; forma: number; moral: number; riesgoLesion: number
-    confianza: Confianza; carrera: Carrera
-    origen?: string; personalidad?: string; estiloJuego?: string
-    traits?: string[]; potencial?: number
-    piernaDominante?: string; altura?: number; peso?: number
-    apodo?: string; dorsal?: number
-    posicionesSecundarias?: string[]
-  }
-
-  const fillStats = (group: Record<string, number>, defaults: Record<string, number>): Record<string, number> => {
-    return { ...defaults, ...group }
-  }
-  const defaultTec = { control:50,pase:50,tiro:50,regate:50,cabeceo:50,centros:50,entradas:50,reflejos:50 }
-  const defaultFis = { resistencia:50,velocidad:50,aceleracion:50,fuerza:50,salto:50,agilidad:50 }
-  const defaultTac = { posicionamiento:50,vision:50,decisiones:50,presion_alta:50,colocacion:50 }
-  const defaultMen = { disciplina:50,confianza:50,presion:50,liderazgo:50,concentracion:50,ambicion:50 }
-
-  return {
-    id: dbPlayer.id,
-    personal: {
-      nombre: dbPlayer.name,
-      apodo: state.apodo,
-      edad: dbPlayer.age,
-      nacionalidad: dbPlayer.nationality,
-      genero: "M",
-      piernaDominante: (state.piernaDominante as "derecho"|"izquierdo"|"ambidiestro") ?? "derecho",
-      altura: state.altura ?? 180,
-      peso: state.peso ?? 75,
-      dorsal: state.dorsal ?? 10,
-      fechaNacimiento: "",
-      cantera: "Academia",
-      representante: "",
-    },
-    posicionPrincipal: dbPlayer.position as Posicion,
-    posicionesSecundarias: (state.posicionesSecundarias as Posicion[] | undefined) ?? [],
-    origen: state.origen ?? "academia",
-    personalidad: state.personalidad ?? "profesional",
-    estiloJuego: state.estiloJuego ?? "",
-    traits: state.traits ?? [],
-    potencial: state.potencial ?? 3,
-    tecnicos: fillStats(attrs.tecnicos as unknown as Record<string, number>, defaultTec) as unknown as StatsTecnicos,
-    fisicos:  fillStats(attrs.fisicos  as unknown as Record<string, number>, defaultFis) as unknown as StatsFisicos,
-    tacticos: fillStats(attrs.tacticos as unknown as Record<string, number>, defaultTac) as unknown as StatsTacticos,
-    mentales: fillStats(attrs.mentales as unknown as Record<string, number>, defaultMen) as unknown as StatsMentales,
-    estado: {
-      fatiga: state.fatiga ?? 0,
-      forma: state.forma ?? 80,
-      moral: state.moral ?? 85,
-      riesgoLesion: state.riesgoLesion ?? 5,
-    },
-    confianza: state.confianza ?? { entrenador: 60, vestuario: 50, reputacion: 40 },
-    carrera: state.carrera,
-  }
-}
+type Phase = "loading" | "error" | "situation" | "rolling" | "result" | "finished"
 
 const POSICION_LABELS: Partial<Record<Posicion, string>> = {
   [Posicion.PORTERO]: "Portero",
@@ -144,108 +42,14 @@ const POSICION_LABELS: Partial<Record<Posicion, string>> = {
   [Posicion.DELANTERO]: "Delantero",
 }
 
-function buildMatchContext(
-  tipo: string,
-  dbState: Record<string, unknown>,
-  nationality: string,
-): MatchContext {
-  const carrera = dbState.carrera as Record<string, unknown>
-  const club = (carrera?.club as string) ?? "—"
-  const liga = (carrera?.liga as string) ?? "Liga"
-
-  if (tipo === "copa") {
-    const copa = carrera?.copa as CopaState | undefined
-    const rondaName = formatRonda(copa ? (COPA_RONDAS[copa.rondaIdx] ?? "R32") : "R32")
-    return {
-      tipo: "copa",
-      rival: copa?.rival ?? "Rival",
-      esLocal: copa?.esLocal ?? true,
-      club,
-      competicion: "Copa del Rey",
-      ronda: rondaName,
-    }
-  }
-
-  if (tipo === "europa") {
-    const europa = carrera?.europa as EuropaState | undefined
-    const nextMatch = europa?.grupoPartidos.find((p) => !p.jugado)
-    const elimMatch = !nextMatch && europa?.eliminatoria && !europa.eliminatoria.jugado
-      ? europa.eliminatoria : undefined
-    const rival = nextMatch?.rival ?? elimMatch?.rival ?? "Rival"
-    const esLocal = nextMatch?.esLocal ?? elimMatch?.esLocal ?? true
-    const competicion = europa ? (EUROPA_COMPETICION_LABELS[europa.competicion] ?? "Europa") : "Europa"
-    const ronda = nextMatch
-      ? "Fase de Grupos"
-      : elimMatch
-        ? formatRonda(["R16","QF","SF","F"][elimMatch.rondaIdx] ?? "Eliminatoria")
-        : "Europa"
-    return { tipo: "europa", rival, esLocal, club, competicion, ronda }
-  }
-
-  if (tipo === "seleccion") {
-    const seleccion = carrera?.seleccion as SeleccionState | undefined
-    const nextParonMatch = seleccion?.paron?.partidos.find((p) => !p.jugado)
-    const tipoPartido = nextParonMatch?.tipo ?? "amistoso"
-    const rondaLabel = tipoPartido === "clasificacion" ? "Clasificación" : "Amistoso"
-    return {
-      tipo: "seleccion",
-      rival: nextParonMatch?.rival ?? "Rival",
-      esLocal: nextParonMatch?.esLocal ?? true,
-      club: nationality,
-      competicion: "Selección Nacional",
-      ronda: rondaLabel,
-    }
-  }
-
-  if (tipo === "seleccion_torneo") {
-    const seleccion = carrera?.seleccion as SeleccionState | undefined
-    const torneo = seleccion?.torneo
-    if (torneo?.fase === "grupos") {
-      const nextMatch = torneo.grupoPartidos.find((p) => !p.jugado)
-      const torneoLabel = torneo.tipo === "eurocopa" ? "Eurocopa" : "Mundial"
-      return {
-        tipo: "seleccion_torneo",
-        rival: nextMatch?.rival ?? "Rival",
-        esLocal: nextMatch?.esLocal ?? true,
-        club: nationality,
-        competicion: torneoLabel,
-        ronda: "Fase de Grupos",
-      }
-    }
-    if (torneo?.fase === "eliminatoria" && torneo.eliminatoria && !torneo.eliminatoria.jugado) {
-      const rondaNames = ["Cuartos de Final", "Semifinales", "Gran Final"]
-      const torneoLabel = torneo.tipo === "eurocopa" ? "Eurocopa" : "Mundial"
-      return {
-        tipo: "seleccion_torneo",
-        rival: torneo.eliminatoria.rival,
-        esLocal: torneo.eliminatoria.esLocal,
-        club: nationality,
-        competicion: torneoLabel,
-        ronda: rondaNames[torneo.eliminatoria.rondaIdx] ?? "Eliminatoria",
-      }
-    }
-  }
-
-  // liga (default)
-  const fixtures = (carrera?.fixtures as Array<{ jornada: number; rival: string; esLocal: boolean }>) ?? []
-  const jornadaActual = (carrera?.jornadaActual as number) ?? 1
-  const fixture = fixtures.find((f) => f.jornada === jornadaActual)
-  return {
-    tipo: "liga",
-    rival: fixture?.rival ?? "Rival",
-    esLocal: fixture?.esLocal ?? true,
-    club,
-    competicion: liga,
-    ronda: `Jornada ${jornadaActual}`,
-  }
-}
-
 function MatchPageInner() {
   const { data: session, isPending } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const [phase, setPhase] = useState<Phase>("loading")
+  const [loadError, setLoadError] = useState("")
+  const [matchId, setMatchId] = useState<string | null>(null)
   const [enginePlayer, setEnginePlayer] = useState<Player | null>(null)
   const [matchContext, setMatchContext] = useState<MatchContext | null>(null)
   const [matchState, setMatchState] = useState<InteractiveMatchState>(initMatchState())
@@ -253,105 +57,105 @@ function MatchPageInner() {
   const [selectedOpcion, setSelectedOpcion] = useState<DecisionOption | null>(null)
   const [diceRoll, setDiceRoll] = useState(1)
   const [diceRolling, setDiceRolling] = useState(false)
+  // Respuesta del servidor para el turno en curso: se aplica cuando termina
+  // la animación del dado, para no destapar el resultado antes de tiempo.
+  const [turnoPendiente, setTurnoPendiente] = useState<RespuestaTurno | null>(null)
+  const [ultimoTurno, setUltimoTurno] = useState<RespuestaTurno | null>(null)
   const [lastResult, setLastResult] = useState<TurnResult | null>(null)
   const [lastEncajado, setLastEncajado] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false)
   const [geminiNarrative, setGeminiNarrative] = useState<string | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
-  // Rasgo "Polivalente": si el usuario activó "jugar como secundaria" en /season
-  // (?posicion=secundaria), este partido se resuelve con la posición secundaria
-  // como posición efectiva — undefined = comportamiento normal, jugar como
-  // posicionPrincipal. Ver context.md, sección de rasgos.
+  // Rasgo "Polivalente": el servidor decide la posición efectiva a partir de
+  // ?posicion=secundaria (ver lib/match-server.ts, iniciarPartido).
   const [posicionEfectiva, setPosicionEfectiva] = useState<Posicion | undefined>(undefined)
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
   }, [session, isPending, router])
 
+  // El partido lo crea (o lo retoma, si estaba a medias) el servidor: el
+  // dado y los resultados ya no se calculan en el navegador.
   useEffect(() => {
     if (!session) return
     const tipo = searchParams.get("tipo") ?? "liga"
-    fetch("/api/player")
-      .then((r) => r.json())
-      .then(({ player: dbPlayer }) => {
-        if (!dbPlayer) { router.push("/create-player"); return }
-        const mapped = mapDbPlayer(dbPlayer as DbPlayer)
-        setEnginePlayer(mapped)
-        const ctx = buildMatchContext(tipo, dbPlayer.state as Record<string, unknown>, dbPlayer.nationality)
-        setMatchContext(ctx)
-        const state = initMatchState()
-        setMatchState(state)
-        const jugarSecundaria = searchParams.get("posicion") === "secundaria"
-        const efectiva = jugarSecundaria ? mapped.posicionesSecundarias[0] : undefined
-        setPosicionEfectiva(efectiva)
-        setSituacion(getSituacionForTurn(1, mapped, efectiva, state.totalTurnos, []))
+    const posicion = searchParams.get("posicion") ?? undefined
+    fetch("/api/match/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, posicion }),
+    })
+      .then(async (res) => {
+        const data = await res.json()
+        if (res.status === 404) { router.push("/create-player"); return }
+        if (res.status === 409 && data.error === "match_in_progress" && data.tipo && data.tipo !== tipo) {
+          router.replace(`/match?tipo=${data.tipo}`)
+          return
+        }
+        if (!res.ok) {
+          setLoadError(data.message ?? "")
+          setPhase("error")
+          return
+        }
+        setMatchId(data.matchId)
+        setEnginePlayer(data.jugador)
+        setMatchContext(data.contexto)
+        setMatchState(data.matchState)
+        setSituacion(data.situacion)
+        setPosicionEfectiva(data.posicionEfectiva ?? undefined)
         setPhase("situation")
       })
       .catch(() => setPhase("error"))
   }, [session, router, searchParams])
 
-  const handleSelectOpcion = (opcion: DecisionOption) => {
-    if (phase !== "situation") return
-    const roll = Math.floor(Math.random() * 20) + 1
+  const handleSelectOpcion = async (opcion: DecisionOption) => {
+    if (phase !== "situation" || !matchId) return
     setSelectedOpcion(opcion)
-    setDiceRoll(roll)
-    setDiceRolling(true)
+    setSaveError("")
     setPhase("rolling")
     playSound("dado")
+
+    try {
+      const res = await fetch("/api/match/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId, turno: matchState.turno, opcionId: opcion.id }),
+      })
+      const data = await res.json()
+      if (res.status === 409) {
+        // El partido cambió en otro sitio (otra pestaña, simulado…): se
+        // recarga desde el servidor en vez de seguir con un estado viejo.
+        window.location.reload()
+        return
+      }
+      if (!res.ok) throw new Error(data.error ?? "turn failed")
+      setTurnoPendiente(data as RespuestaTurno)
+      setDiceRoll(data.roll)
+      setDiceRolling(true)
+    } catch {
+      setSaveError("No se pudo resolver la jugada — revisa tu conexión y vuelve a elegir.")
+      setSelectedOpcion(null)
+      setPhase("situation")
+    }
   }
 
   const handleDiceComplete = useCallback(() => {
-    if (!enginePlayer || !situacion || !selectedOpcion) return
+    if (!enginePlayer || !situacion || !selectedOpcion || !turnoPendiente) return
     setDiceRolling(false)
-    const rawResult = resolveDecisionWithDice(
-      selectedOpcion,
-      enginePlayer,
-      situacion,
-      diceRoll,
-      matchState.marcador,
-      posicionEfectiva,
-    )
+    const resp = turnoPendiente
+    const result = resp.result
 
-    // Segunda amarilla del partido = roja automática (regla real del fútbol) —
-    // ver FASE D en context.md. resolveDecisionWithDice no conoce el historial
-    // del partido, así que la escalada se resuelve aquí, con matchState.
-    let tarjeta = rawResult.tarjeta
-    let tarjetasAmarillas = matchState.tarjetasAmarillas
-    let expulsado = matchState.expulsado
-    if (tarjeta === "amarilla") {
-      if (matchState.tarjetasAmarillas >= 1) {
-        tarjeta = "roja"
-        expulsado = true
-      } else {
-        tarjetasAmarillas += 1
-      }
-    } else if (tarjeta === "roja") {
-      expulsado = true
-    }
-    const result = { ...rawResult, tarjeta }
-
-    // Un único sonido por turno, no varios a la vez -- gol es lo más
-    // relevante, luego tarjeta, si no hay ninguno el resultado general.
+    // Un único sonido por turno: gol, si no tarjeta, si no el resultado general.
     if (result.gol) playSound("gol")
-    else if (tarjeta) playSound("tarjeta")
+    else if (result.tarjeta) playSound("tarjeta")
     else playSound(RESULT_SOUND[result.resultado] ?? "exito")
 
     setLastResult(result)
     setLastEncajado(result.marcador.visitante > matchState.marcador.visitante)
-    setMatchState((prev) => ({
-      ...prev,
-      marcador: result.marcador,
-      valoracion: parseFloat(
-        Math.max(1, Math.min(10, prev.valoracion + result.valoracionDelta)).toFixed(1)
-      ),
-      goles: prev.goles + (result.gol ? 1 : 0),
-      asistencias: prev.asistencias + (result.asistencia ? 1 : 0),
-      tiros: prev.tiros + (situacion.esOportunidadGol ? 1 : 0),
-      log: [...prev.log, result],
-      tarjetasAmarillas,
-      expulsado,
-    }))
+    setMatchState(resp.matchState)
+    setUltimoTurno(resp)
+    setTurnoPendiente(null)
     setGeminiNarrative(null)
     setGeminiLoading(true)
     setPhase("result")
@@ -362,7 +166,7 @@ function MatchPageInner() {
       minuto: situacion.minuto,
       situacion: situacion.descripcion,
       accion: selectedOpcion.texto,
-      dado: diceRoll,
+      dado: resp.roll,
       resultado: getResultLabel(result.resultado),
       narrativoBase: result.narrativo,
       gol: result.gol,
@@ -370,77 +174,16 @@ function MatchPageInner() {
       setGeminiNarrative(text)
       setGeminiLoading(false)
     })
-  }, [enginePlayer, situacion, selectedOpcion, diceRoll, matchState.marcador])
+  }, [enginePlayer, situacion, selectedOpcion, turnoPendiente, matchState.marcador])
 
-  const handleContinue = async () => {
-    if (!enginePlayer) return
-    const isLastTurn = matchState.turno >= matchState.totalTurnos
-
-    if (isLastTurn) {
-      setPhase("saving")
-      // "Físico Excepcional": fatiga acumula un 25% más lento (ver player-config.ts).
-      const fatigaGanada = enginePlayer.traits.includes("fisico_excepcional") ? 20 * 0.75 : 20
-      const newFatiga = Math.min(100, enginePlayer.estado.fatiga + fatigaGanada)
-      const tipo = matchContext?.tipo ?? "liga"
-      const esLocal = matchContext?.esLocal ?? true
-      // marcador.local/visitante son siempre "mis goles"/"goles del rival" (así los
-      // llena resolveDecisionWithDice), independientemente de si juegas en casa o
-      // fuera — esLocal solo indica quién es el equipo local a efectos de
-      // visualización, nunca hay que usarlo para decidir cuál marcador es el mío.
-      const ganado = matchState.marcador.local > matchState.marcador.visitante
-
-      // Antes, un fallo del servidor (no de red — fetch no lanza excepción en
-      // un 4xx/5xx) pasaba desapercibido: el catch nunca saltaba, y la
-      // pantalla de victoria se mostraba igual con las estadísticas como si
-      // se hubieran guardado, cuando en realidad no se había persistido nada
-      // (ver auditoría UX, heurística 9). Ahora se comprueba res.ok, y si
-      // falla (de red o del servidor) el partido se queda en la pantalla del
-      // último turno con un aviso y la posibilidad de reintentar pulsando
-      // "Continuar" otra vez, en vez de avanzar a "finished".
-      setSaveError("")
-      try {
-        const res = await fetch("/api/match/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            matchStats: {
-              goles: matchState.goles,
-              asistencias: matchState.asistencias,
-              valoracion: matchState.valoracion,
-              marcador: `${matchState.marcador.local}-${matchState.marcador.visitante}`,
-              tarjetasAmarillas: matchState.tarjetasAmarillas,
-              tarjetasRojas: matchState.log.filter((r) => r.tarjeta === "roja").length,
-            },
-            updatedState: { fatiga: newFatiga },
-            tipo,
-            ganado,
-            golesRival: matchState.marcador.visitante,
-            esLocal,
-            expulsado: matchState.expulsado,
-          }),
-        })
-        if (!res.ok) {
-          setSaveError("No se pudo guardar el partido. Tus estadísticas todavía no se han aplicado — pulsa \"Continuar\" para reintentarlo.")
-          setPhase("result")
-          return
-        }
-      } catch {
-        setSaveError("No se pudo guardar el partido — revisa tu conexión. Tus estadísticas todavía no se han aplicado; pulsa \"Continuar\" para reintentarlo.")
-        setPhase("result")
-        return
-      }
+  const handleContinue = () => {
+    if (!ultimoTurno) return
+    // El último turno ya guardó el partido en el servidor (api/match/turn).
+    if (ultimoTurno.finished) {
       setPhase("finished")
       return
     }
-
-    const nextTurn = matchState.turno + 1
-    // Se recuerdan las últimas 3 situaciones jugadas para que getSituacionForTurn
-    // no repita ninguna de ellas mientras el pool lo permita.
-    const nuevasRecientes = situacion
-      ? [...matchState.situacionesRecientes, situacion.id].slice(-3)
-      : matchState.situacionesRecientes
-    setMatchState((prev) => ({ ...prev, turno: nextTurn, situacionesRecientes: nuevasRecientes }))
-    setSituacion(getSituacionForTurn(nextTurn, enginePlayer, posicionEfectiva, matchState.totalTurnos, nuevasRecientes))
+    setSituacion(ultimoTurno.situacion)
     setSelectedOpcion(null)
     setLastResult(null)
     setGeminiNarrative(null)
@@ -460,7 +203,7 @@ function MatchPageInner() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950">
         <div className="text-center space-y-4">
-          <p className="text-red-400">Error cargando el partido.</p>
+          <p className="text-red-400">{loadError || "Error cargando el partido."}</p>
           <button
             onClick={() => router.push("/dashboard")}
             className="px-6 py-2 bg-gray-800 text-white rounded-lg"
@@ -586,20 +329,20 @@ function MatchPageInner() {
           </div>
           <div className="text-right shrink-0">
             <p className="text-xs text-gray-500">Turno</p>
-            <p className="text-sm font-bold">{matchState.turno}/{matchState.totalTurnos}</p>
+            <p className="text-sm font-bold">{phase === "result" && ultimoTurno ? ultimoTurno.turno : matchState.turno}/{matchState.totalTurnos}</p>
           </div>
         </div>
         {showAbandonConfirm && (
           <div className="max-w-lg mx-auto mt-3 bg-red-500/10 border border-red-500/30 rounded-xl p-3 space-y-2">
             <p className="text-red-300 text-xs">
-              ¿Abandonar el partido? Perderás el progreso de este partido — no se guarda nada hasta el último turno.
+              ¿Salir del partido? Queda guardado tal cual: al volver lo retomas en el mismo turno.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => router.push("/season")}
                 className="flex-1 py-2 bg-red-500 hover:bg-red-400 text-black font-bold rounded-lg text-xs transition-colors"
               >
-                Sí, abandonar
+                Salir
               </button>
               <button
                 onClick={() => setShowAbandonConfirm(false)}
@@ -713,17 +456,11 @@ function MatchPageInner() {
               <ResultReveal
                 result={lastResult}
                 onContinue={handleContinue}
-                isLastTurn={matchState.turno >= matchState.totalTurnos}
+                isLastTurn={!!ultimoTurno?.finished}
                 geminiNarrative={geminiNarrative}
                 geminiLoading={geminiLoading}
               />
             </div>
-          </div>
-        )}
-
-        {phase === "saving" && (
-          <div className="text-center text-gray-400 py-8">
-            Guardando partido...
           </div>
         )}
 

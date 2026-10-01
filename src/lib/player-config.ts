@@ -337,6 +337,12 @@ export const FOOT_OPTIONS: { id: DominantFoot; label: string; bonus: Partial<Rec
 
 // ─── Build full stat block from parts ────────────────────────────────────────
 
+// Reparto de puntos extra del asistente de creación. Viven aquí (y no en
+// create-player/page.tsx) porque el servidor también los necesita para
+// validar el reparto (lib/player-creation.ts).
+export const EXTRA_POINTS = 30
+export const MAX_PER_STAT = 15
+
 export function buildAttributes(
   position: Position,
   origin: OriginId,

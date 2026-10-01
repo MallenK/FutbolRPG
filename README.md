@@ -42,10 +42,11 @@ App disponible en http://localhost:3000
 
 - `pnpm test` — ejecuta los tests unitarios (Vitest)
 - `pnpm test:watch` — tests unitarios en modo watch
-- `pnpm test:e2e` — tests end-to-end (Playwright): levanta su propio `next dev` en el puerto 3100 y corre flujos completos reales (registro → crear personaje → jugar/simular una temporada → borrar cuenta) contra la base de datos de `DATABASE_URL`. Las cuentas de prueba se crean y se borran solas al final de cada test.
+- `pnpm test:e2e` — tests end-to-end (Playwright): compila la app y la sirve en el puerto 3100, y corre flujos completos reales (registro → crear personaje → jugar un partido turno a turno → simular una temporada → borrar cuenta) contra la base de datos de `DATABASE_URL`. Las cuentas de prueba se crean y se borran solas al final de cada test. `E2E_SKIP_BUILD=1 pnpm test:e2e` reutiliza el build anterior al iterar en local.
 - `pnpm test:e2e:ui` — lo mismo, con la UI interactiva de Playwright (útil para depurar un test que falla)
 - `pnpm db:studio` — explorador visual de la base de datos (Drizzle Studio)
 - `pnpm db:generate` / `pnpm db:migrate` — migraciones
+- `pnpm db:backfill-gloria` — rellena `state.gloria` en jugadores antiguos y crea los índices del ranking (simulación por defecto; `--apply` escribe). Es idempotente, se puede repetir
 - `pnpm remotion` — abrir Remotion Studio para editar los loaders
 
 Ver [ROADMAP.md](ROADMAP.md) para el estado y plan de desarrollo.

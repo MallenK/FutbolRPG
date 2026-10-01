@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import { borrarInvitado } from "./helpers"
 
 // Ranking y actividad son las únicas páginas "sociales" de la app: no se
 // pueden ver sin sesión, y una sesión de invitado (plugin `anonymous`, ver
@@ -28,6 +29,9 @@ test("ranking y actividad exigen cuenta real -- ni sin sesión ni como invitado"
   expect(leaderboardRes.status()).toBe(401)
   const feedRes = await page.request.get("/api/feed")
   expect(feedRes.status()).toBe(401)
+
+  // Antes esta cuenta de invitado se quedaba en la base de datos para siempre.
+  await borrarInvitado(page)
 })
 
 // Smoke test de la UI de pestañas del ranking, ya con una cuenta real (la

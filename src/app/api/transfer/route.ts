@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { readJson } from "@/lib/http"
 import { getPlayerByUserId } from "@/lib/players"
 import { generateTransferOffers, type MercadoState } from "@/lib/world"
 
@@ -35,10 +34,11 @@ export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { action } = await req.json()
+  const body = await readJson<{ action: string }>(req)
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  const { action } = body
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
@@ -48,6 +48,19 @@ export async function POST(req: NextRequest) {
   const divisionActual = (carrera?.divisionActual as number) ?? 3
   const currentClub = (carrera?.club as string) ?? ""
   const jornadaActual = (carrera?.jornadaActual as number) ?? 1
+  const temporada = (carrera?.temporada as number) ?? 1
+
+  // Una tanda de ofertas nuevas por jornada. Antes "Actualizar ofertas" se
+  // podía pulsar sin límite hasta que saliera una oferta de primera división.
+  const marca = `${temporada}-${jornadaActual}`
+  if ((action === "requestTransfer" || action === "refreshOffers") && carrera?.mercadoRefrescadoEn === marca) {
+    return NextResponse.json({
+      success: false,
+      limitado: true,
+      message: "Ya has recibido las ofertas de esta jornada. Juega el siguiente partido para recibir nuevas.",
+      mercado,
+    }, { status: 429 })
+  }
 
   if (action === "requestTransfer") {
     const newOffers = generateTransferOffers(reputacion, divisionActual, currentClub, jornadaActual)
@@ -56,9 +69,9 @@ export async function POST(req: NextRequest) {
       ofertasActivas: [...mercado.ofertasActivas, ...newOffers],
       ultimaActualizacion: jornadaActual,
     }
-    const newCarrera = { ...carrera, mercado: newMercado }
-    await db.update(player).set({ state: { ...state, carrera: newCarrera }, updatedAt: new Date() }).where(eq(player.userId, session.user.id))
-    return NextResponse.json({ success: true, mercado: newMercado })
+    // Una tanda vacía (reputación baja) no gasta el refresco de la jornada.
+    const newCarrera = { ...carrera, mercado: newMercado, ...(newOffers.length > 0 ? { mercadoRefrescadoEn: marca } : {}) }
+    return { state: { ...state, carrera: newCarrera }, result: NextResponse.json({ success: true, mercado: newMercado }) }
   }
 
   if (action === "refreshOffers") {
@@ -68,10 +81,10 @@ export async function POST(req: NextRequest) {
       ofertasActivas: newOffers,
       ultimaActualizacion: jornadaActual,
     }
-    const newCarrera = { ...carrera, mercado: newMercado }
-    await db.update(player).set({ state: { ...state, carrera: newCarrera }, updatedAt: new Date() }).where(eq(player.userId, session.user.id))
-    return NextResponse.json({ success: true, mercado: newMercado })
+    const newCarrera = { ...carrera, mercado: newMercado, ...(newOffers.length > 0 ? { mercadoRefrescadoEn: marca } : {}) }
+    return { state: { ...state, carrera: newCarrera }, result: NextResponse.json({ success: true, mercado: newMercado }) }
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 })
+  })
 }

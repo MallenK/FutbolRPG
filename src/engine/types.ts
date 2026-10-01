@@ -127,12 +127,6 @@ export interface SeasonSummary {
   logros: string[]; // "Ascenso", "Descenso", "Campeón"
 }
 
-export interface WorldState {
-  equiposPrimera: string[];
-  equiposSegunda: string[];
-  campeonesHistoricos: string[];
-}
-
 export interface SeasonHistory {
   historialPartidos: MatchRecord[];
   resumenesTemporadas: SeasonSummary[];
@@ -147,8 +141,7 @@ export interface Carrera {
   temporada: number;
   etiquetas: string[]; 
   estadisticasTemporada: StatsTemporada;
-  historial: SeasonHistory; 
-  mundo: WorldState; // Nuevo: Estado del mundo (ascensos/descensos)
+  historial: SeasonHistory;
 }
 
 export interface Player {

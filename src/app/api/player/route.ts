@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { player, career } from "@/lib/schema"
-import { eq } from "drizzle-orm"
+import { player } from "@/lib/schema"
 import { requireSession } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { conGloria } from "@/lib/gloria"
+import { readJson } from "@/lib/http"
+import { validarCreacion } from "@/lib/player-creation"
 import { getDivisionInfo, type Division } from "@/lib/world"
 import { updateRacha, type RachaState } from "@/lib/streak"
 
@@ -90,39 +93,39 @@ export async function GET() {
   const found = await getPlayerByUserId(session.user.id)
   if (!found) return NextResponse.json({ player: null })
 
-  // Racha diaria: solo se escribe en BD la primera vez que se abre la app en
-  // un día natural (UTC) — cargas repetidas el mismo día son gratis.
-  const state = found.state as Record<string, unknown>
-  const { racha, isNewDay } = updateRacha(state.racha as RachaState | undefined)
-  if (!isNewDay) return NextResponse.json({ player: found })
-
-  const newState = {
-    ...state,
-    racha,
-    moral: Math.min(100, ((state.moral as number) ?? 85) + 2),
+  // Racha diaria: solo se escribe la primera vez que se abre la app en un día
+  // natural (UTC). La lectura rápida por HTTP decide si hace falta; la
+  // escritura se repite dentro de la transacción por si otra petición ya la
+  // hizo entre medias (dos pestañas abriendo la app a la vez).
+  if (!updateRacha((found.state as Record<string, unknown>).racha as RachaState | undefined).isNewDay) {
+    return NextResponse.json({ player: found })
   }
-  await db.update(player)
-    .set({ state: newState, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
 
-  return NextResponse.json({ player: { ...found, state: newState } })
+  return mutatePlayerOr404<Response>(session.user.id, (row) => {
+    const state = row.state as Record<string, unknown>
+    const { racha, isNewDay } = updateRacha(state.racha as RachaState | undefined)
+    if (!isNewDay) return NextResponse.json({ player: row })
+    const newState = { ...state, racha, moral: Math.min(100, ((state.moral as number) ?? 85) + 2) }
+    return { state: newState, result: NextResponse.json({ player: { ...row, state: conGloria(newState) } }) }
+  })
 }
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const body = await req.json()
-  const { name, position, nationality, attributes, divisionInicial, rpg, state, modoJuego } = body
+  const body = await readJson(req)
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
-  if (!name || !position || !attributes) {
-    return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 })
-  }
+  // Atributos, rasgos y potencial se reconstruyen en el servidor a partir de
+  // las elecciones del asistente; nunca se acepta un `state` ni unos
+  // `attributes` ya calculados por el cliente (ver lib/player-creation.ts).
+  const valid = validarCreacion(body)
+  if ("error" in valid) return NextResponse.json({ error: valid.error }, { status: 400 })
+  const { name, position, nationality, attributes, rpg, modoJuego } = valid
 
-  const division = (Math.max(1, Math.min(5, divisionInicial ?? 3))) as Division
-  const initialState = buildInitialState(division, rpg, modoJuego)
-  const divInfo = getDivisionInfo(division)
-  const age = rpg?.age ?? 18
+  const division = valid.divisionInicial as Division
+  const initialState = buildInitialState(division, rpg, typeof modoJuego === "string" ? modoJuego : undefined)
 
   const playerId = createId()
 
@@ -132,21 +135,13 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       name,
       position,
-      nationality: nationality ?? "España",
-      age,
+      nationality,
+      age: rpg.age,
       attributes,
-      state: state ?? initialState,
+      state: conGloria(initialState),
     })
-
-    await db.insert(career).values({
-      id: createId(),
-      playerId,
-      currentClub: initialState.carrera.club,
-      currentLeague: divInfo.nombre,
-      currentSeason: 1,
-      status: "active",
-      stats: { goals: 0, assists: 0, matches: 0, rating: 6.0 },
-    })
+    // La tabla `career` ya no se escribe: nunca se leía, todo el estado de la
+    // carrera vive en player.state.carrera (informe-fallos.md, Ronda 6, B4).
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Ya tienes un jugador creado" }, { status: 409 })
@@ -157,25 +152,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ success: true, playerId })
 }
 
-export async function PUT(req: NextRequest) {
-  const { session, error } = await requireSession()
-  if (error) return error
-
-  const body = await req.json()
-  const { state, attributes } = body
-
-  const updates: Partial<typeof player.$inferInsert> = { updatedAt: new Date() }
-  if (state !== undefined) updates.state = state
-  if (attributes !== undefined) updates.attributes = attributes
-
-  const updated = await db.update(player)
-    .set(updates)
-    .where(eq(player.userId, session.user.id))
-    .returning({ id: player.id })
-
-  if (updated.length === 0) {
-    return NextResponse.json({ error: "No player found" }, { status: 404 })
-  }
-
-  return NextResponse.json({ success: true })
-}
+// El antiguo PUT /api/player (sobrescribir `state` y `attributes` enteros con
+// lo que mandara el cliente) se eliminó: ninguna pantalla lo usaba y permitía
+// editarse el personaje a voluntad. Cada cambio legítimo tiene su propia ruta
+// validada (profile, upgrade, match/save, season/*).

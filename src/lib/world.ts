@@ -708,10 +708,35 @@ export type ContratoState = {
   salarioRelativo: number
 }
 
-export function generateContrato(division: number): ContratoState {
+// Salario relativo de 1 a 5. Parte de la división (5 = la más alta) y se
+// ajusta por reputación: un jugador muy conocido cobra un escalón más, uno
+// casi desconocido uno menos. Antes era `division - 1`, así que nunca llegaba
+// a 5 (informe-fallos.md, Ronda 6, B6). Se recalcula cada vez que se firma o
+// se renueva un contrato.
+export const SALARIO_LABELS: Record<number, string> = {
+  1: "Modesto",
+  2: "Correcto",
+  3: "Bueno",
+  4: "Alto",
+  5: "Estrella",
+}
+
+export function calcularSalario(division: number, reputacion = 40): number {
+  let salario = division
+  if (reputacion >= 70) salario += 1
+  else if (reputacion < 20) salario -= 1
+  return Math.max(1, Math.min(5, Math.round(salario)))
+}
+
+export function formatSalario(salario: number | undefined): string {
+  const n = Math.max(1, Math.min(5, Math.round(salario ?? 2)))
+  return `${SALARIO_LABELS[n]} (${n}/5)`
+}
+
+export function generateContrato(division: number, reputacion = 40): ContratoState {
   return {
     temporadasRestantes: 2,
-    salarioRelativo: Math.max(1, Math.min(5, division - 1)),
+    salarioRelativo: calcularSalario(division, reputacion),
   }
 }
 

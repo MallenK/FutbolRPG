@@ -8,7 +8,7 @@ import XPBar from "@/components/XPBar"
 import VideoLoader from "@/components/VideoLoader"
 import TrophyShowcase from "@/components/TrophyShowcase"
 import { POSITION_STAT_PROFILES, STAT_BY_KEY, PERSONALITIES, TRAITS, ORIGINS, type Position } from "@/lib/player-config"
-import { getDivisionInfo, calcularGloria, type SeasonHistoryEntry } from "@/lib/world"
+import { getDivisionInfo, calcularGloria, formatSalario, type SeasonHistoryEntry } from "@/lib/world"
 
 type SimpleMatch = { valoracion: number; goles: number; asistencias: number; marcador: string }
 
@@ -530,6 +530,9 @@ export default function DashboardPage() {
                     </p>
                     <p className="text-gray-500 text-xs">
                       temporada{player.state.carrera.contrato.temporadasRestantes !== 1 ? "s" : ""} restante{player.state.carrera.contrato.temporadasRestantes !== 1 ? "s" : ""}
+                    </p>
+                    <p className="text-gray-400 text-xs mt-1">
+                      Salario <span className="text-white font-semibold">{formatSalario(player.state.carrera.contrato.salarioRelativo)}</span>
                     </p>
                   </div>
                 )}

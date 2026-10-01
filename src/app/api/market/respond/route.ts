@@ -1,138 +1,109 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { transferListing, transferOffer, player, activityLog } from "@/lib/schema"
+import { transferListing, transferOffer, activityLog } from "@/lib/schema"
 import { eq, and, ne } from "drizzle-orm"
-import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { requireRealAccount } from "@/lib/session"
+import { readJson } from "@/lib/http"
 import { createId } from "@/lib/id"
-import { getUserContactByUserId } from "@/lib/players"
+import { getPlayerByUserId, getUserContactByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
 import { sendOfferAcceptedEmail, sendOfferRejectedEmail } from "@/lib/email"
 
+type Aviso = { tipo: "accepted" | "rejected"; fromUserId: string; club?: string }
+
+// Responder a una oferta del mercado entre usuarios. Todo lo que cambia
+// (estado de la oferta, rechazo de las demás, anuncio, fichaje del jugador y
+// entrada de actividad) va en una transacción con la fila del jugador
+// bloqueada: dos clics seguidos, o aceptar dos ofertas a la vez, ya no pueden
+// aplicar el fichaje dos veces ni dejar el mercado a medias.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession()
+  const { session, error } = await requireRealAccount()
   if (error) return error
 
-  const { offerId, action } = await req.json() as { offerId: string; action: "accept" | "reject" }
-  if (!offerId || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+  const body = await readJson<{ offerId: string; action: string }>(req)
+  const { offerId, action } = body ?? {}
+  if (typeof offerId !== "string" || (action !== "accept" && action !== "reject")) {
+    return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+  }
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  let aviso: Aviso | null = null
 
-  // Verify the offer belongs to MY listing
-  const listing = await db
-    .select()
-    .from(transferListing)
-    .where(eq(transferListing.userId, session.user.id))
-    .limit(1)
+  const response = await mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
+    const listing = await tx.select().from(transferListing).where(eq(transferListing.userId, session.user.id)).limit(1)
+    if (listing.length === 0) return NextResponse.json({ error: "No listing found" }, { status: 404 })
 
-  if (listing.length === 0) return NextResponse.json({ error: "No listing found" }, { status: 404 })
-
-  const offer = await db
-    .select()
-    .from(transferOffer)
-    .where(and(
-      eq(transferOffer.id, offerId),
-      eq(transferOffer.listingId, listing[0].id),
-      eq(transferOffer.status, "pending"),
-    ))
-    .limit(1)
-
-  if (offer.length === 0) return NextResponse.json({ error: "Offer not found" }, { status: 404 })
-
-  if (action === "reject") {
-    await db
+    // Transición condicional pending → accepted/rejected: solo gana una petición.
+    const claimed = await tx
       .update(transferOffer)
-      .set({ status: "rejected" })
-      .where(eq(transferOffer.id, offerId))
+      .set({ status: action === "accept" ? "accepted" : "rejected" })
+      .where(and(
+        eq(transferOffer.id, offerId),
+        eq(transferOffer.listingId, listing[0].id),
+        eq(transferOffer.status, "pending"),
+      ))
+      .returning()
+    const offer = claimed[0]
+    if (!offer) return NextResponse.json({ error: "Offer not found" }, { status: 404 })
 
+    if (action === "reject") {
+      aviso = { tipo: "rejected", fromUserId: offer.fromUserId }
+      return NextResponse.json({ success: true, action: "rejected" })
+    }
+
+    // ACCEPT: club, liga y división se leen en vivo del jugador que ofreció,
+    // no del snapshot de la oferta (informe-fallos.md, Ronda 6, A3).
+    const state = found.state as Record<string, unknown>
+    const carrera = (state.carrera ?? {}) as Record<string, unknown>
+    const previousClub = (carrera.club as string) ?? "—"
+    const offererPlayer = await getPlayerByUserId(offer.fromUserId)
+    const offererCarrera = (offererPlayer?.state as Record<string, unknown> | undefined)?.carrera as
+      | Record<string, unknown>
+      | undefined
+    const newCarrera = {
+      ...carrera,
+      club: (offererCarrera?.club as string | undefined) ?? offer.fromClub,
+      liga: (offererCarrera?.liga as string | undefined) ?? (carrera.liga as string | undefined),
+      divisionActual: (offererCarrera?.divisionActual as number | undefined) ?? (carrera.divisionActual as number | undefined),
+    }
+
+    await tx.update(transferOffer)
+      .set({ status: "rejected" })
+      .where(and(
+        eq(transferOffer.listingId, listing[0].id),
+        eq(transferOffer.status, "pending"),
+        ne(transferOffer.id, offerId),
+      ))
+    await tx.update(transferListing).set({ active: false }).where(eq(transferListing.id, listing[0].id))
+    await tx.insert(activityLog).values({
+      id: createId(),
+      userId: session.user.id,
+      playerName: found.name,
+      playerPosition: found.position,
+      clubName: newCarrera.club,
+      eventType: "transfer",
+      data: { fromClub: previousClub, toClub: newCarrera.club, offeredBy: offer.fromPlayerName },
+    })
+
+    aviso = { tipo: "accepted", fromUserId: offer.fromUserId, club: newCarrera.club }
+    return {
+      state: { ...state, carrera: newCarrera },
+      result: NextResponse.json({ success: true, action: "accepted", newClub: newCarrera.club }),
+    }
+  })
+
+  // Email fuera de la transacción: best-effort, un fallo no deshace el fichaje.
+  const enviado = aviso as Aviso | null
+  if (enviado) {
     try {
-      const offerer = await getUserContactByUserId(offer[0].fromUserId)
+      const offerer = await getUserContactByUserId(enviado.fromUserId)
       if (offerer && !offerer.notificacionesOfertasDesactivadas) {
-        const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/mercado`
-        await sendOfferRejectedEmail(offerer.email, offerer.name, url)
+        const base = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"
+        if (enviado.tipo === "rejected") await sendOfferRejectedEmail(offerer.email, offerer.name, `${base}/mercado`)
+        else await sendOfferAcceptedEmail(offerer.email, offerer.name, enviado.club ?? "", `${base}/dashboard`)
       }
     } catch (err) {
       console.error("[market/respond] fallo al enviar email de notificación", err)
     }
-
-    return NextResponse.json({ success: true, action: "rejected" })
   }
 
-  // ACCEPT: change club, close listing, reject all other offers
-  const state = found.state as Record<string, unknown>
-  const carrera = (state?.carrera ?? {}) as Record<string, unknown>
-  const previousClub = (carrera?.club as string) ?? "—"
-
-  // Club/liga/división del fichaje se leen en vivo del jugador que ofreció,
-  // no del snapshot guardado en la oferta (`transferOffer.fromClub`, que
-  // nunca guardó liga/división y además puede haber quedado obsoleto si el
-  // que ofrece cambió de club mientras la oferta estaba pendiente). Sin esto,
-  // el aceptante se quedaba con un club nuevo pero la liga/división de antes
-  // — rivales, elegibilidad europea y perfil público, todos mal (ver
-  // informe-fallos.md, Ronda 6, hallazgo A3).
-  const offererPlayer = await getPlayerByUserId(offer[0].fromUserId)
-  const offererCarrera = (offererPlayer?.state as Record<string, unknown> | undefined)?.carrera as
-    | Record<string, unknown>
-    | undefined
-  const newCarrera = {
-    ...carrera,
-    club: (offererCarrera?.club as string | undefined) ?? offer[0].fromClub,
-    liga: (offererCarrera?.liga as string | undefined) ?? (carrera?.liga as string | undefined),
-    divisionActual: (offererCarrera?.divisionActual as number | undefined) ?? (carrera?.divisionActual as number | undefined),
-  }
-  const newState = { ...state, carrera: newCarrera }
-
-  await db.update(player)
-    .set({ state: newState, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  await db.update(transferOffer)
-    .set({ status: "accepted" })
-    .where(eq(transferOffer.id, offerId))
-
-  // Reject all other pending offers on this listing
-  await db.update(transferOffer)
-    .set({ status: "rejected" })
-    .where(and(
-      eq(transferOffer.listingId, listing[0].id),
-      eq(transferOffer.status, "pending"),
-      ne(transferOffer.id, offerId),
-    ))
-
-  // Deactivate listing
-  await db.update(transferListing)
-    .set({ active: false })
-    .where(eq(transferListing.id, listing[0].id))
-
-  // Log the transfer — usa el club resuelto en vivo (newCarrera.club), no el
-  // snapshot de la oferta, por la misma razón de arriba.
-  await db.insert(activityLog).values({
-    id: createId(),
-    userId: session.user.id,
-    playerName: found.name,
-    playerPosition: found.position,
-    clubName: newCarrera.club,
-    eventType: "transfer",
-    data: {
-      fromClub: previousClub,
-      toClub: newCarrera.club,
-      offeredBy: offer[0].fromPlayerName,
-    },
-  })
-
-  try {
-    const offerer = await getUserContactByUserId(offer[0].fromUserId)
-    if (offerer && !offerer.notificacionesOfertasDesactivadas) {
-      const url = `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/dashboard`
-      await sendOfferAcceptedEmail(offerer.email, offerer.name, newCarrera.club, url)
-    }
-  } catch (err) {
-    console.error("[market/respond] fallo al enviar email de notificación", err)
-  }
-
-  return NextResponse.json({
-    success: true,
-    action: "accepted",
-    newClub: newCarrera.club,
-  })
+  return response
 }

@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { transferListing, player } from "@/lib/schema"
 import { eq } from "drizzle-orm"
-import { requireSession } from "@/lib/session"
+import { requireRealAccount } from "@/lib/session"
 import { getPlayerByUserId } from "@/lib/players"
 import { createId } from "@/lib/id"
 import { mercadoLocked } from "@/lib/premium"
 
 export async function POST() {
-  const { session, error } = await requireSession()
+  const { session, error } = await requireRealAccount()
   if (error) return error
 
   const isPremium = (session.user as { isPremium?: boolean }).isPremium ?? false

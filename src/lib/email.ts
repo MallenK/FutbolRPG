@@ -28,6 +28,8 @@ function wrapper(title: string, bodyHtml: string, ctaText: string, ctaUrl: strin
 }
 
 async function send(to: string, subject: string, html: string) {
+  // Los tests e2e crean cuentas @example.com, que Resend rechaza con un 422.
+  if (process.env.E2E_TEST_MODE === "1") return
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY no configurada — no se envía "${subject}" a ${to}`)
     return

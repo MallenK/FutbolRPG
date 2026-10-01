@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { activityLog, player } from "@/lib/schema"
-import { desc, eq, sql } from "drizzle-orm"
+import { activityLog, player, user } from "@/lib/schema"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { requireRealAccount } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
@@ -14,7 +14,12 @@ export async function GET() {
     .select({ activityLog })
     .from(activityLog)
     .innerJoin(player, eq(activityLog.userId, player.userId))
-    .where(sql`(${player.state}->'preferencias'->>'ocultoEnActividad')::boolean IS NOT TRUE`)
+    .innerJoin(user, eq(activityLog.userId, user.id))
+    // Invitados fuera: no pueden ver la actividad, tampoco aparecen en ella.
+    .where(and(
+      sql`${user.isAnonymous} IS NOT TRUE`,
+      sql`(${player.state}->'preferencias'->>'ocultoEnActividad')::boolean IS NOT TRUE`,
+    ))
     .orderBy(desc(activityLog.createdAt))
     .limit(50)
 
