@@ -9,7 +9,6 @@ export type EventoEfectos = {
   confianza_entrenador?: number
   confianza_vestuario?: number
   transferirA?: { club: string; liga: string; rol: string; division: number }
-  seleccionConvocado?: boolean
   // Renegociar el contrato ahora mismo, a un número de temporadas concreto
   // (en vez de dejar que se renueve solo, en silencio, al cerrar la
   // temporada — ver informe-fallos.md, Ronda 6, hallazgo M3).

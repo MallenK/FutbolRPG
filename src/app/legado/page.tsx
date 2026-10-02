@@ -30,6 +30,23 @@ export default function LegadoPage() {
   const [legado, setLegado] = useState<LegadoEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [hasPlayer, setHasPlayer] = useState<boolean | null>(null)
+  const [retiroConfirmed, setRetiroConfirmed] = useState(false)
+  const [retiroLoading, setRetiroLoading] = useState(false)
+
+  // "Retirarse" es una decisión de carrera, no una preferencia de cuenta —
+  // vivía en Ajustes, mezclada con seguridad y borrado de cuenta; se movió
+  // aquí, su destino natural, ya que Legado es literalmente el archivo de
+  // carreras retiradas (ver informe-fallos.md, Ronda 8).
+  async function handleRetirar() {
+    setRetiroLoading(true)
+    const res = await fetch("/api/legado/retirar", { method: "POST" })
+    if (res.ok) {
+      setHasPlayer(false)
+      setRetiroConfirmed(false)
+      fetch("/api/legado").then((r) => r.json()).then((d) => setLegado(d.legado ?? []))
+    }
+    setRetiroLoading(false)
+  }
 
   useEffect(() => {
     if (!isPending && !session) router.push("/login")
@@ -55,7 +72,7 @@ export default function LegadoPage() {
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
         <div className="flex items-center gap-4 mb-2">
           <button onClick={() => router.push("/dashboard")} className="text-gray-500 hover:text-white text-sm transition-colors">
-            ← Volver
+            ← Perfil
           </button>
           <h1 className="text-2xl font-black">
             Futbol<span className="text-green-400">RPG</span>
@@ -71,6 +88,32 @@ export default function LegadoPage() {
           >
             Crear un jugador nuevo →
           </button>
+        )}
+
+        {hasPlayer === true && (
+          <div className="bg-gray-900 rounded-2xl border border-orange-900/40 p-6">
+            <h3 className="text-orange-400 font-bold text-sm mb-2">Retirarte de tu carrera actual</h3>
+            <p className="text-gray-500 text-xs mb-3">
+              Cierra tu carrera actual para siempre y pásala a este archivo. Después podrás crear un jugador nuevo.
+              Tus estadísticas y premios quedan guardados, pero la carrera actual no se puede recuperar.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={retiroConfirmed}
+                onChange={(e) => setRetiroConfirmed(e.target.checked)}
+                className="w-4 h-4 accent-orange-500"
+              />
+              Entiendo que esta carrera terminará
+            </label>
+            <button
+              onClick={handleRetirar}
+              disabled={!retiroConfirmed || retiroLoading}
+              className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white font-bold text-sm rounded-lg transition-colors"
+            >
+              {retiroLoading ? "Retirando..." : "Retirarme y empezar de nuevo"}
+            </button>
+          </div>
         )}
 
         {legado.length === 0 ? (

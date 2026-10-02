@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { readJson } from "@/lib/http"
 
 const MODOS_JUEGO = ["completo", "decisivos", "simulado"]
 
@@ -17,44 +15,56 @@ type PreferenciasPatch = Partial<{
   sonidoDesactivado: boolean
 }>
 
+const PREFERENCIAS_VALIDAS = [
+  "reducirMovimiento",
+  "ocultarAvisoMercado",
+  "ocultoEnRanking",
+  "ocultoEnActividad",
+  "perfilPublicoOculto",
+  "notificacionesOfertasDesactivadas",
+  "sonidoDesactivado",
+] as const satisfies readonly (keyof PreferenciasPatch)[]
+
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const body = await req.json()
-  const { apodo, dorsal, preferencias, modoJuego } = body as {
-    apodo?: string
-    dorsal?: number
-    preferencias?: PreferenciasPatch
-    modoJuego?: string
-  }
+  const body = await readJson<{
+    apodo: unknown
+    dorsal: unknown
+    preferencias: unknown
+    modoJuego: unknown
+  }>(req)
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  const { apodo, dorsal, preferencias, modoJuego } = body
 
-  const existing = await getPlayerByUserId(session.user.id)
-  if (!existing) {
-    return NextResponse.json({ error: "No player found" }, { status: 404 })
-  }
+  return mutatePlayerOr404<Response>(session.user.id, async (existing, tx) => {
 
   const state = { ...(existing.state as Record<string, unknown>) }
 
-  if (apodo !== undefined) {
-    state.apodo = apodo.trim() || undefined
+  if (typeof apodo === "string") {
+    state.apodo = apodo.trim().slice(0, 30) || undefined
   }
-  if (dorsal !== undefined) {
+  if (typeof dorsal === "number" && Number.isFinite(dorsal)) {
     state.dorsal = Math.max(1, Math.min(99, Math.round(dorsal)))
   }
-  if (preferencias !== undefined) {
+  if (typeof preferencias === "object" && preferencias !== null) {
+    // Lista blanca: antes cualquier clave del body acababa guardada en
+    // player.state.preferencias.
+    const patch: PreferenciasPatch = {}
+    for (const key of PREFERENCIAS_VALIDAS) {
+      const v = (preferencias as Record<string, unknown>)[key]
+      if (typeof v === "boolean") patch[key] = v
+    }
     state.preferencias = {
       ...(state.preferencias as Record<string, unknown> | undefined),
-      ...preferencias,
+      ...patch,
     }
   }
-  if (modoJuego !== undefined && MODOS_JUEGO.includes(modoJuego)) {
+  if (typeof modoJuego === "string" && MODOS_JUEGO.includes(modoJuego)) {
     state.carrera = { ...(state.carrera as Record<string, unknown>), modoJuego }
   }
 
-  await db.update(player)
-    .set({ state, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({ success: true, state })
+  return { state, result: NextResponse.json({ success: true, state }) }
+  })
 }

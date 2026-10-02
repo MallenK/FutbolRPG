@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireSession } from "@/lib/session"
+import { readJson } from "@/lib/http"
 
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+// gemini-1.5-flash fue retirado por Google en 2025: con ese modelo la API
+// responde error y la narrativa IA caía siempre al texto de respaldo. El
+// modelo se puede cambiar sin tocar código con GEMINI_MODEL.
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash"
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
+
+// Cada campo de texto que se interpola en el prompt se recorta: evita que
+// alguien use la cuota gratuita de Gemini con prompts arbitrarios largos.
+const MAX_CAMPO = 300
+
+function recortarCampos<T>(ctx: T): T {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(ctx as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v.slice(0, MAX_CAMPO)
+    else if (Array.isArray(v)) out[k] = v.slice(0, 10).map((x) => (typeof x === "string" ? x.slice(0, 80) : x))
+    else out[k] = v
+  }
+  return out as T
+}
 
 type NarrativeContext =
   | {
@@ -58,24 +77,30 @@ function buildPrompt(ctx: NarrativeContext): string {
 }
 
 export async function POST(req: NextRequest) {
+  // Antes esta ruta no pedía sesión: cualquiera podía usarla como proxy
+  // gratuito de Gemini con la clave del proyecto.
+  const { error } = await requireSession()
+  if (error) return error
+
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: "No API key" }, { status: 503 })
   }
 
-  let ctx: NarrativeContext
-  try {
-    ctx = await req.json()
-  } catch {
+  const body = await readJson(req)
+  if (!body || !["match", "event", "season"].includes(body.type as string)) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 })
   }
+  const ctx = recortarCampos(body as unknown as NarrativeContext)
+  if (ctx.type === "season" && !Array.isArray(ctx.premios)) ctx.premios = []
 
   const prompt = buildPrompt(ctx)
 
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    const res = await fetch(GEMINI_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // La clave va en cabecera, no en la URL, para que no acabe en logs.
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 120, temperature: 0.85 },

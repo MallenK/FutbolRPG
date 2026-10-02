@@ -5,7 +5,7 @@ import {
   getStatLabel,
   initMatchState,
 } from "./match-interactive"
-import { createDefaultPlayer } from "./player"
+import { jugadorDePrueba } from "@/lib/test-fixtures"
 import { Posicion, ResultadoDecision, DecisionOption } from "./types"
 
 describe("initMatchState", () => {
@@ -40,7 +40,7 @@ describe("getStatLabel", () => {
 
 describe("getSituacionForTurn", () => {
   it("para un jugador de campo (no portero), nunca devuelve una situación peligroPropio", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     player.posicionPrincipal = Posicion.DELANTERO
     for (let i = 0; i < 200; i++) {
       const s = getSituacionForTurn(1, player)
@@ -49,7 +49,7 @@ describe("getSituacionForTurn", () => {
   })
 
   it("para un portero, siempre devuelve una situación peligroPropio", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     player.posicionPrincipal = Posicion.PORTERO
     for (let i = 0; i < 200; i++) {
       const s = getSituacionForTurn(1, player)
@@ -58,7 +58,7 @@ describe("getSituacionForTurn", () => {
   })
 
   it("respeta posicionEfectiva sobre posicionPrincipal para decidir el pool (portero por posición secundaria efectiva)", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     player.posicionPrincipal = Posicion.DELANTERO
     for (let i = 0; i < 50; i++) {
       const s = getSituacionForTurn(1, player, Posicion.PORTERO)
@@ -67,7 +67,7 @@ describe("getSituacionForTurn", () => {
   })
 
   it("la dificultad base siempre queda acotada entre 30 y 80", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     for (let turno = 1; turno <= 5; turno++) {
       for (let i = 0; i < 50; i++) {
         const s = getSituacionForTurn(turno, player)
@@ -78,19 +78,19 @@ describe("getSituacionForTurn", () => {
   })
 
   it("el minuto se calcula proporcionalmente al turno (turno/5 * 90 por defecto)", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     const s3 = getSituacionForTurn(3, player)
     expect(s3.minuto).toBe(Math.round((3 / 5) * 90))
   })
 
   it("el minuto usa el totalTurnos real del partido cuando se pasa explícito", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     const s = getSituacionForTurn(2, player, undefined, 3)
     expect(s.minuto).toBe(Math.round((2 / 3) * 90))
   })
 
   it("no repite ninguna de las situaciones recientes mientras el pool lo permita", () => {
-    const player = createDefaultPlayer()
+    const player = jugadorDePrueba()
     player.posicionPrincipal = Posicion.DELANTERO
     for (let i = 0; i < 100; i++) {
       const previa = getSituacionForTurn(1, player, undefined, 5, [])
@@ -100,7 +100,7 @@ describe("getSituacionForTurn", () => {
   })
 
   it("favorece las situaciones marcadas para la posición del jugador (peso, no filtro exclusivo)", () => {
-    const central = createDefaultPlayer()
+    const central = jugadorDePrueba()
     central.posicionPrincipal = Posicion.DEFENSA_CENTRAL
 
     const conteo: Record<string, number> = {}
@@ -118,7 +118,7 @@ describe("getSituacionForTurn", () => {
       Posicion.DEFENSA_CENTRAL, Posicion.LATERAL, Posicion.MEDIOCENTRO,
       Posicion.MEDIAPUNTA, Posicion.EXTREMO, Posicion.DELANTERO,
     ]) {
-      const player = createDefaultPlayer()
+      const player = jugadorDePrueba()
       player.posicionPrincipal = posicion
       for (let i = 0; i < 100; i++) {
         const s = getSituacionForTurn(5, player)
@@ -129,7 +129,7 @@ describe("getSituacionForTurn", () => {
 })
 
 describe("resolveDecisionWithDice", () => {
-  const player = createDefaultPlayer()
+  const player = jugadorDePrueba()
   const opcionBase: DecisionOption = {
     id: "tiro_seguro",
     texto: "opción",
@@ -195,7 +195,7 @@ describe("resolveDecisionWithDice", () => {
   })
 
   it("con el trait penalty_expert, un penalti siempre resulta en gol", () => {
-    const experto = createDefaultPlayer()
+    const experto = jugadorDePrueba()
     experto.traits = ["penalty_expert"]
     const situacionPenalti = { ...situacionGol, id: "penalti" }
     for (let i = 0; i < 50; i++) {
@@ -205,7 +205,7 @@ describe("resolveDecisionWithDice", () => {
   })
 
   it("en situación peligroPropio (portero), un CRITICO_FALLO concede el gol con mucha más frecuencia que un PERFECTO", () => {
-    const portero = createDefaultPlayer()
+    const portero = jugadorDePrueba()
     portero.posicionPrincipal = Posicion.PORTERO
     // riesgo alto (>=0.3) y presionSituacional alto (>=40) para que isCriticoFalloCondition
     // pueda cumplirse (ver decision.ts: score<=15 y (riesgo>=0.3 || fatiga>=85 || presion>=40))
@@ -236,10 +236,10 @@ describe("resolveDecisionWithDice", () => {
   })
 
   it("el trait muro_infranqueable reduce la frecuencia de encajar gol en peligroPropio respecto a no tenerlo", () => {
-    const conMuro = createDefaultPlayer()
+    const conMuro = jugadorDePrueba()
     conMuro.posicionPrincipal = Posicion.PORTERO
     conMuro.traits = ["muro_infranqueable"]
-    const sinMuro = createDefaultPlayer()
+    const sinMuro = jugadorDePrueba()
     sinMuro.posicionPrincipal = Posicion.PORTERO
     sinMuro.traits = []
 
@@ -266,7 +266,7 @@ describe("resolveDecisionWithDice", () => {
     const N = 150
     let sumaEnPosicion = 0
     let sumaFueraPosicion = 0
-    const jugador = createDefaultPlayer()
+    const jugador = jugadorDePrueba()
     jugador.posicionPrincipal = Posicion.DELANTERO
     jugador.traits = []
     for (let i = 0; i < N; i++) {
@@ -277,7 +277,7 @@ describe("resolveDecisionWithDice", () => {
   })
 
   it("con el trait polivalente, jugar fuera de posición no penaliza el score", () => {
-    const jugador = createDefaultPlayer()
+    const jugador = jugadorDePrueba()
     jugador.posicionPrincipal = Posicion.DELANTERO
     jugador.traits = ["polivalente"]
     // Usamos el mismo dado (determinista) para aislar el efecto de la penalización de posición

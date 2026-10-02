@@ -86,14 +86,26 @@ El proyecto está muy por delante de lo que reflejaba este documento anteriormen
 
 ```
 user, session, account, verification   → Better Auth
-player                                  → datos del futbolista
-career                                  → carrera activa del jugador
-season_history                          → historial de temporadas
-transfer_listing / transfer_offer       → mercado de fichajes
+player                                  → el futbolista y TODO su estado de partida (jsonb)
+legado                                  → carreras ya retiradas (Hall of Fame)
+transfer_listing / transfer_offer       → mercado de fichajes entre usuarios
 activity_log                            → feed global
+career, season_history                  → huérfanas: ni se leen ni se escriben
 ```
 
-Selección Nacional, torneos internacionales y galardones ya están implementados (Fase 3), pero sin tablas propias — viven dentro del jsonb `player.state.carrera` (`seleccion`, `premios`, `historialTemporadas`), igual que el resto del estado de carrera. No hizo falta migración para tenerlos.
+**Todo el estado de la partida vive en el jsonb `player.state`** (sobre todo
+`player.state.carrera`): calendario, competiciones, selección, premios, contrato, mercado,
+historial de temporadas y el partido interactivo en curso. Por eso casi ninguna feature ha
+necesitado migración.
+
+Reglas que sostienen ese diseño:
+
+- **Toda escritura pasa por `mutatePlayer`** (`src/lib/player-store.ts`): transacción con
+  `SELECT … FOR UPDATE`, para que dos peticiones simultáneas del mismo jugador no se pisen.
+- **`state.gloria` se recalcula en cada escritura** y el ranking ordena en SQL por esa clave,
+  con índice. Sin eso el ranking no escala.
+- **El servidor es la fuente de verdad**: el partido interactivo se resuelve en
+  `src/lib/match-server.ts`, no en el navegador.
 
 ---
 
@@ -124,9 +136,11 @@ Fases 1, 2 y 4 completas; de la Fase 3 solo queda reputación/popularidad (sin d
 
 1. ~~**Score de "gloria" unificado**~~ ✅ Hecho (Ronda 4, `informe-fallos.md`) — `calcularGloria`/`calcularGloriaTemporada` en `world.ts`, ponderando títulos por tamaño de club (división), ascensos, posición final y prestigio de selección. Es ahora la pestaña por defecto de `/leaderboard`, se muestra en `/comparar/[id]` y como badge en `/dashboard`.
 2. ~~**Testing automatizado end-to-end**~~ ✅ Hecho (Ronda 5, `informe-fallos.md`) — Playwright configurado, 2 specs cubriendo el ciclo de vida completo de una cuenta y el ranking.
-3. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
-4. **Optimización de rendimiento y SEO.**
-5. **Música de fondo** — los efectos de sonido puntuales ya existen, falta el ambiente continuo.
+3. ~~**Partido y estado a prueba de trampas**~~ ✅ Hecho (Rondas 9 y 10) — motor del partido en el servidor, escrituras transaccionales, validación de todo lo que llega del cliente, ranking con índices e invitados fuera de lo social.
+4. **Limpieza de cuentas de invitado** — cada "Continuar como invitado" deja una cuenta anónima permanente que nadie borra. Falta un barrido periódico de anónimos sin actividad.
+5. **Separar nacionalidad de la pirámide de ligas** — hoy toda carrera de club vive en la única pirámide española de 5 divisiones; solo la Selección Nacional refleja la nacionalidad elegida (arreglado en Ronda 3). Abrir más países/ligas es el cambio de mayor alcance pendiente.
+6. **Optimización de rendimiento y SEO.**
+7. **Música de fondo** — los efectos de sonido puntuales ya existen, falta el ambiente continuo.
 
 ---
 

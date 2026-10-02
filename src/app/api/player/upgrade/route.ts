@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { readJson } from "@/lib/http"
 import { STAT_BY_KEY, type StatKey } from "@/lib/player-config"
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { stat } = await req.json()
+  const body = await readJson<{ stat: string }>(req)
+  const stat = typeof body?.stat === "string" ? body.stat : ""
   // Derivado de STAT_BY_KEY (los 25 stats reales) en vez de una lista aparte
   // mantenida a mano — una lista duplicada es justo lo que dejó 10 de los 25
   // stats (incluidos reflejos/colocacion/concentracion/salto, los principales
@@ -18,8 +17,7 @@ export async function POST(req: NextRequest) {
   const group = STAT_BY_KEY[stat as StatKey]?.group
   if (!group) return NextResponse.json({ error: "Invalid stat" }, { status: 400 })
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const attributePoints = (state.attributePoints as number) ?? 0
@@ -34,13 +32,10 @@ export async function POST(req: NextRequest) {
     [group]: { ...attrs[group], [stat]: currentValue + 1 },
   }
 
-  await db.update(player)
-    .set({
-      attributes: newAttrs,
-      state: { ...state, attributePoints: attributePoints - 1 },
-      updatedAt: new Date(),
-    })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({ success: true, stat, newValue: currentValue + 1 })
+  return {
+    attributes: newAttrs,
+    state: { ...state, attributePoints: attributePoints - 1 },
+    result: NextResponse.json({ success: true, stat, newValue: currentValue + 1 }),
+  }
+  })
 }

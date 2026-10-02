@@ -2,7 +2,8 @@ import { db } from "./db"
 import { player, legado } from "./schema"
 import { eq, desc } from "drizzle-orm"
 import { createId } from "./id"
-import { getPlayerByUserId } from "./players"
+import { mutatePlayer, NoPlayerError, type PlayerRow } from "./player-store"
+import type { Tx } from "./db"
 import type { SeasonHistoryEntry } from "./world"
 
 // Retira permanentemente al jugador actual del usuario: archiva un resumen
@@ -11,26 +12,19 @@ import type { SeasonHistoryEntry } from "./world"
 // /create-player. Se llama tanto desde el evento narrativo de retiro
 // ("retiro_forzado" → opción "retirarse", ver season/event/route.ts) como
 // desde el botón manual de Ajustes (api/legado/retirar).
-export async function retirarJugador(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const found = await getPlayerByUserId(userId)
-  if (!found) return { ok: false, error: "No player found" }
-
+// Archiva y borra dentro de una transacción ya abierta (con la fila bloqueada
+// por mutatePlayer): el archivo en `legado` y el borrado del jugador son
+// atómicos, no puede quedar uno sin el otro.
+export async function retirarJugadorEnTx(tx: Tx, found: PlayerRow): Promise<void> {
   const state = found.state as Record<string, unknown>
   const carrera = (state.carrera ?? {}) as Record<string, unknown>
   const statsTemporada = (carrera.estadisticasTemporada ?? {}) as Record<string, number>
   const statsCarrera = (carrera.estadisticasCarrera ?? {}) as Record<string, number>
   const historial = (carrera.historialTemporadas ?? []) as SeasonHistoryEntry[]
 
-  const estadisticas = {
-    partidosJugados: (statsCarrera.partidosJugados ?? 0) + (statsTemporada.partidosJugados ?? 0),
-    goles: (statsCarrera.goles ?? 0) + (statsTemporada.goles ?? 0),
-    asistencias: (statsCarrera.asistencias ?? 0) + (statsTemporada.asistencias ?? 0),
-  }
-  const premios = historial.flatMap((h) => h.premios)
-
-  await db.insert(legado).values({
+  await tx.insert(legado).values({
     id: createId(),
-    userId,
+    userId: found.userId,
     playerName: found.name,
     apodo: (state.apodo as string | undefined) ?? null,
     position: found.position,
@@ -41,14 +35,34 @@ export async function retirarJugador(userId: string): Promise<{ ok: true } | { o
     divisionFinal: (carrera.divisionActual as number) ?? 3,
     nivelFinal: (state.level as number) ?? 1,
     reputacionFinal: (carrera.reputacion as number) ?? 0,
-    estadisticas,
-    premios,
+    estadisticas: {
+      partidosJugados: (statsCarrera.partidosJugados ?? 0) + (statsTemporada.partidosJugados ?? 0),
+      goles: (statsCarrera.goles ?? 0) + (statsTemporada.goles ?? 0),
+      asistencias: (statsCarrera.asistencias ?? 0) + (statsTemporada.asistencias ?? 0),
+    },
+    premios: historial.flatMap((h) => h.premios),
     historialTemporadas: historial,
   })
 
-  await db.delete(player).where(eq(player.userId, userId))
+  await tx.delete(player).where(eq(player.id, found.id))
+}
 
-  return { ok: true }
+// Retira permanentemente al jugador actual del usuario: archiva un resumen
+// de la carrera completa en `legado` (sobrevive a que se borre `player`) y
+// borra la fila de `player` para que pueda crear una carrera nueva desde
+// /create-player. Se llama desde el botón manual (api/legado/retirar); el
+// evento narrativo de retiro usa retirarJugadorEnTx dentro de su transacción.
+export async function retirarJugador(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await mutatePlayer(userId, async (found, tx) => {
+      await retirarJugadorEnTx(tx, found)
+      return { result: null }
+    })
+    return { ok: true }
+  } catch (err) {
+    if (err instanceof NoPlayerError) return { ok: false, error: "No player found" }
+    throw err
+  }
 }
 
 export async function getLegadoByUserId(userId: string) {

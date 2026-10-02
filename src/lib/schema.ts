@@ -7,6 +7,7 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 
 // ─── Better Auth tables ────────────────────────────────────────────────────
 
@@ -82,8 +83,19 @@ export const player = pgTable("player", {
   state: jsonb("state").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-})
+}, (t) => [
+  // Una por categoría del ranking (api/leaderboard): ordenar por una
+  // expresión sobre el jsonb sin índice obliga a leer toda la tabla.
+  // `gloria` la mantiene precalculada lib/player-store.ts en cada escritura.
+  index("player_gloria_idx").on(sql`((${t.state}->>'gloria')::int)`),
+  index("player_reputacion_idx").on(sql`((${t.state}->'carrera'->>'reputacion')::int)`),
+  index("player_temporada_idx").on(sql`((${t.state}->'carrera'->>'temporada')::int)`),
+  index("player_level_idx").on(sql`((${t.state}->>'level')::int)`),
+])
 
+// Tablas `career` y `seasonHistory`: huérfanas, ya no se leen ni se escriben.
+// Todo el estado de la carrera vive en player.state.carrera. Se mantienen solo
+// para no perder los datos que ya tienen (informe-fallos.md, Ronda 6, B4).
 export const career = pgTable("career", {
   id: text("id").primaryKey(),
   playerId: text("player_id")
@@ -151,7 +163,10 @@ export const activityLog = pgTable("activity_log", {
   eventType: text("event_type").notNull(), // 'match' | 'season_end'
   data: jsonb("data").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-})
+}, (t) => [
+  index("activity_log_created_idx").on(t.createdAt),
+  index("activity_log_user_idx").on(t.userId),
+])
 
 // Vitrina permanente de carreras retiradas ("Legado"/Hall of Fame). Vive en
 // su propia tabla (no en player.state) porque un usuario puede acumular
@@ -176,4 +191,6 @@ export const legado = pgTable("legado", {
   premios: jsonb("premios").notNull(), // string[] -- todos los trofeos ganados en la carrera
   historialTemporadas: jsonb("historial_temporadas").notNull(), // SeasonHistoryEntry[] completo
   retiradoEn: timestamp("retirado_en").notNull().defaultNow(),
-})
+}, (t) => [
+  index("legado_user_idx").on(t.userId),
+])

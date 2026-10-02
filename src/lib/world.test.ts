@@ -399,9 +399,17 @@ describe("generateContrato", () => {
   })
 
   it("el salario relativo queda acotado entre 1 y 5 y crece con la división", () => {
-    expect(generateContrato(1).salarioRelativo).toBe(1) // max(1, min(5, 0)) = 1
-    expect(generateContrato(5).salarioRelativo).toBe(4)
+    expect(generateContrato(1).salarioRelativo).toBe(1)
+    expect(generateContrato(3).salarioRelativo).toBe(3)
+    expect(generateContrato(5).salarioRelativo).toBe(5) // antes nunca llegaba al máximo
     expect(generateContrato(10).salarioRelativo).toBe(5) // clamp superior
+  })
+
+  it("la reputación mueve el salario un escalón arriba o abajo", () => {
+    expect(generateContrato(3, 80).salarioRelativo).toBe(4)
+    expect(generateContrato(3, 10).salarioRelativo).toBe(2)
+    expect(generateContrato(1, 5).salarioRelativo).toBe(1) // clamp inferior
+    expect(generateContrato(5, 90).salarioRelativo).toBe(5)
   })
 })
 

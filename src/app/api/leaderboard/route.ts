@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { player, user } from "@/lib/schema"
-import { eq, sql } from "drizzle-orm"
-import { calcularGloria, type SeasonHistoryEntry } from "@/lib/world"
+import { and, eq, sql } from "drizzle-orm"
+import { gloriaDeEstado } from "@/lib/gloria"
 import { requireRealAccount } from "@/lib/session"
+import type { SeasonHistoryEntry } from "@/lib/world"
 
 export const dynamic = "force-dynamic"
 
@@ -22,21 +23,30 @@ type LeaderboardEntry = {
   trophies: number
 }
 
-// "gloria" no es un campo escalar simple del jsonb (hay que reducir el array
-// historialTemporadas con pesos), así que para esa categoría no se puede
-// ordenar en SQL como las demás: se trae un lote más amplio, se calcula y
-// ordena en JS, y se recorta a 50 después. Para las demás categorías se sigue
-// ordenando en SQL como antes (más barato, y no hace falta cambiarlo).
-const GLORIA_FETCH_LIMIT = 500
+const TOP = 50
+
+// Cada categoría ordena en SQL sobre una expresión con índice propio (ver
+// schema.ts). La gloria va precalculada en player.state.gloria desde
+// lib/player-store.ts; antes se traían 500 filas sin orden y se ordenaban en
+// memoria, así que con más de 500 jugadores el top 50 salía mal.
+const ORDEN = {
+  gloria: sql`(${player.state}->>'gloria')::int DESC NULLS LAST`,
+  reputation: sql`(${player.state}->'carrera'->>'reputacion')::int DESC NULLS LAST`,
+  seasons: sql`(${player.state}->'carrera'->>'temporada')::int DESC NULLS LAST`,
+  level: sql`(${player.state}->>'level')::int DESC NULLS LAST`,
+} as const
 
 export async function GET(req: Request) {
   const { error } = await requireRealAccount()
   if (error) return error
 
   const { searchParams } = new URL(req.url)
-  const category = searchParams.get("category") ?? "gloria"
+  const pedida = searchParams.get("category") ?? "gloria"
+  const category = (pedida in ORDEN ? pedida : "gloria") as keyof typeof ORDEN
 
-  const baseQuery = db
+  // Los filtros van en SQL, antes del LIMIT: filtrar después (como antes)
+  // dejaba el ranking con menos de 50 entradas si alguien del top estaba oculto.
+  const rows = await db
     .select({
       playerId: player.id,
       playerName: player.name,
@@ -46,61 +56,36 @@ export async function GET(req: Request) {
     })
     .from(player)
     .innerJoin(user, eq(player.userId, user.id))
+    .where(and(
+      // Los invitados no pueden ver el ranking, así que tampoco aparecen en él.
+      sql`${user.isAnonymous} IS NOT TRUE`,
+      sql`(${player.state}->'preferencias'->>'ocultoEnRanking')::boolean IS NOT TRUE`,
+    ))
+    .orderBy(ORDEN[category], player.id)
+    .limit(TOP)
 
-  const rows = category === "gloria"
-    ? await baseQuery.limit(GLORIA_FETCH_LIMIT)
-    : await baseQuery
-        .orderBy(
-          category === "reputation"
-            ? sql`(${player.state}->'carrera'->>'reputacion')::int DESC NULLS LAST`
-            : category === "seasons"
-              ? sql`(${player.state}->'carrera'->>'temporada')::int DESC NULLS LAST`
-              : sql`(${player.state}->>'level')::int DESC NULLS LAST`,
-        )
-        .limit(50)
-
-  let entries: Omit<LeaderboardEntry, "rank">[] = rows
-    .filter((r) => {
-      const state = r.state as Record<string, unknown>
-      const preferencias = (state?.preferencias ?? {}) as Record<string, unknown>
-      return preferencias.ocultoEnRanking !== true
-    })
-    .map((r) => {
-      const state = r.state as Record<string, unknown>
-      const carrera = (state?.carrera ?? {}) as Record<string, unknown>
-      const statsTemporada = (carrera?.estadisticasTemporada ?? {}) as Record<string, number>
-      const statsCarrera = (carrera?.estadisticasCarrera ?? {}) as Record<string, number>
-      const historial = (carrera?.historialTemporadas ?? []) as SeasonHistoryEntry[]
-      const reputacion = (carrera?.reputacion as number) ?? 0
-      const seleccion = carrera?.seleccion as { capas?: number; golesSeleccion?: number } | undefined
-      // Goles de carrera = temporadas ya cerradas (acumulado) + la temporada en curso
-      // (todavía no volcada al acumulado) — ver informe-fallos.md B1.
-      const golesCarrera = (statsCarrera?.goles ?? 0) + (statsTemporada?.goles ?? 0)
-      return {
-        playerId: r.playerId,
-        playerName: r.playerName,
-        userName: r.userName,
-        position: r.position,
-        club: (carrera?.club as string) ?? "—",
-        level: (state?.level as number) ?? 1,
-        reputation: reputacion,
-        seasons: (carrera?.temporada as number) ?? 1,
-        goals: golesCarrera,
-        trophies: historial.reduce((n, t) => n + t.premios.length, 0),
-        gloria: calcularGloria({
-          historialTemporadas: historial,
-          reputacion,
-          seleccionCapas: seleccion?.capas ?? 0,
-          seleccionGoles: seleccion?.golesSeleccion ?? 0,
-        }),
-      }
-    })
-
-  if (category === "gloria") {
-    entries = entries.sort((a, b) => b.gloria - a.gloria).slice(0, 50)
-  }
-
-  return NextResponse.json({
-    entries: entries.map((e, i): LeaderboardEntry => ({ ...e, rank: i + 1 })),
+  const entries = rows.map((r, i): LeaderboardEntry => {
+    const state = r.state as Record<string, unknown>
+    const carrera = (state?.carrera ?? {}) as Record<string, unknown>
+    const statsTemporada = (carrera.estadisticasTemporada ?? {}) as Record<string, number>
+    const statsCarrera = (carrera.estadisticasCarrera ?? {}) as Record<string, number>
+    const historial = (carrera.historialTemporadas ?? []) as SeasonHistoryEntry[]
+    return {
+      rank: i + 1,
+      playerId: r.playerId,
+      playerName: r.playerName,
+      userName: r.userName,
+      position: r.position,
+      club: (carrera.club as string) ?? "—",
+      level: (state?.level as number) ?? 1,
+      reputation: (carrera.reputacion as number) ?? 0,
+      seasons: (carrera.temporada as number) ?? 1,
+      // Goles de carrera = temporadas cerradas + la temporada en curso (B1).
+      goals: (statsCarrera.goles ?? 0) + (statsTemporada.goles ?? 0),
+      trophies: historial.reduce((n, t) => n + t.premios.length, 0),
+      gloria: typeof state?.gloria === "number" ? state.gloria : gloriaDeEstado(state),
+    }
   })
+
+  return NextResponse.json({ entries })
 }

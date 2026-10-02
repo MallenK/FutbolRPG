@@ -9,7 +9,7 @@ import {
   POSITIONS, NATIONALITIES, NATIONALITY_FLAGS,
   ORIGINS, PERSONALITIES, PLAY_STYLES, SELECTABLE_TRAITS, getSelectableTraits,
   FOOT_OPTIONS, POSITION_STAT_PROFILES, STAT_BY_KEY, BASE_STATS,
-  buildAttributes,
+  buildAttributes, EXTRA_POINTS, MAX_PER_STAT,
   type Position, type OriginId, type PersonalityId, type DominantFoot, type StatKey,
 } from "@/lib/player-config"
 import { getDivisionInfo } from "@/lib/world"
@@ -22,8 +22,6 @@ const PlayerAvatarPreview = dynamic(() => import("@/components/PlayerAvatarPrevi
 })
 
 const TOTAL_STEPS = 7
-const EXTRA_POINTS = 30
-const MAX_PER_STAT = 15
 
 const MODOS_JUEGO: { id: "completo" | "decisivos" | "simulado"; label: string; description: string }[] = [
   { id: "completo", label: "Completo", description: "Juegas todos los partidos, de todas las competiciones, tú mismo." },
@@ -189,7 +187,6 @@ export default function CreatePlayerPage() {
     setSubmitting(true)
     setError("")
     const origin = ORIGINS.find((o) => o.id === originId)!
-    const attributes = buildAttributes(position, originId, extras, foot)
     const currentYear = 2026
     const age = currentYear - birthYear
 
@@ -202,7 +199,9 @@ export default function CreatePlayerPage() {
           position,
           nationality,
           divisionInicial,
-          attributes,
+          // El servidor recalcula los atributos a partir de este reparto
+          // (lib/player-creation.ts); `attributes` ya no se envía.
+          extraPoints: extras,
           modoJuego,
           rpg: {
             apellido,

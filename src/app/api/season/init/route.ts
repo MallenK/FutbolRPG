@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server"
-import { db } from "@/lib/db"
-import { player } from "@/lib/schema"
-import { eq } from "drizzle-orm"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
+import { mutatePlayerOr404 } from "@/lib/player-store"
 import { seleccionLocked } from "@/lib/premium"
+import { generateFixtures } from "@/lib/fixtures"
 import {
   getRivales,
   generateCopaState,
@@ -17,35 +15,11 @@ import {
   type ContratoState,
 } from "@/lib/world"
 
-type Fixture = {
-  jornada: number
-  rival: string
-  esLocal: boolean
-  jugado: boolean
-  resultado: string | null
-  golesJugador: number
-  valoracion: number | null
-}
-
-function generateFixtures(rivals: string[]): Fixture[] {
-  // 8 opponents × 2 (home + away) = 16 jornadas
-  const opponents = rivals.slice(0, 8)
-  const raw: Omit<Fixture, "jornada">[] = []
-  for (const rival of opponents) {
-    raw.push({ rival, esLocal: true,  jugado: false, resultado: null, golesJugador: 0, valoracion: null })
-    raw.push({ rival, esLocal: false, jugado: false, resultado: null, golesJugador: 0, valoracion: null })
-  }
-  // shuffle so home/away legs are spread across the calendar
-  raw.sort(() => Math.random() - 0.5)
-  return raw.map((f, i) => ({ ...f, jornada: i + 1 }))
-}
-
 export async function POST() {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
+  return mutatePlayerOr404<Response>(session.user.id, async (found, tx) => {
 
   const state = found.state as Record<string, unknown>
   const carrera = state.carrera as Record<string, unknown>
@@ -84,7 +58,7 @@ export async function POST() {
 
   // Contrato: keep existing or generate new
   const existingContrato = (carrera?.contrato as ContratoState | undefined)
-  const contrato: ContratoState = existingContrato ?? generateContrato(division)
+  const contrato: ContratoState = existingContrato ?? generateContrato(division, reputacion)
 
   const newCarrera = {
     ...carrera,
@@ -98,11 +72,10 @@ export async function POST() {
     eventoActual: null,
     eventosPendientes: [],
     premios: [],
+    partidoEnCurso: null,
+    ultimoTurno: null,
   }
 
-  await db.update(player)
-    .set({ state: { ...state, carrera: newCarrera }, updatedAt: new Date() })
-    .where(eq(player.userId, session.user.id))
-
-  return NextResponse.json({ success: true, fixtures })
+  return { state: { ...state, carrera: newCarrera }, result: NextResponse.json({ success: true, fixtures }) }
+  })
 }

@@ -1,48 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireSession } from "@/lib/session"
-import { getPlayerByUserId } from "@/lib/players"
-import { performMatchSave } from "@/lib/match-save"
-import { simularResultadoPartido } from "@/engine/quick-sim"
+import { readJson } from "@/lib/http"
+import { activityLog } from "@/lib/schema"
+import { mutatePlayerOr404 } from "@/lib/player-store"
+import { completarEnCursoYCalcular, simularYCalcular } from "@/lib/match-save"
 
 // Resuelve un partido entero de golpe con el simulador basado en atributos
-// (src/engine/quick-sim.ts) en vez de jugarlo turno a turno en /match. Usado
-// por los modos de juego "decisivos" y "simulado" (ver season/page.tsx).
+// (src/engine/quick-sim.ts) en vez de jugarlo turno a turno. Usado por el
+// modo de juego "decisivos" (ver season/page.tsx). Si ese mismo partido se
+// había empezado por turnos, se termina desde donde estaba en vez de
+// descartarlo: así no sirve para "repetir" un partido que iba mal.
 export async function POST(req: NextRequest) {
   const { session, error } = await requireSession()
   if (error) return error
 
-  const { tipo } = (await req.json()) as { tipo?: string }
+  const body = await readJson<{ tipo: string }>(req)
+  const tipo = typeof body?.tipo === "string" ? body.tipo : "liga"
 
-  const found = await getPlayerByUserId(session.user.id)
-  if (!found) return NextResponse.json({ error: "No player found" }, { status: 404 })
-
-  const state = found.state as Record<string, unknown>
-  const forma = (state.forma as number) ?? 80
-  const fatiga = (state.fatiga as number) ?? 0
-
-  const sim = simularResultadoPartido(
-    found.position,
-    found.attributes as Parameters<typeof simularResultadoPartido>[1],
-    forma,
-    fatiga,
-  )
-
-  // "Físico Excepcional": misma reducción de fatiga acumulada que en /match/page.tsx.
-  const traits = (state.traits as string[]) ?? []
-  const fatigaGanada = traits.includes("fisico_excepcional") ? 20 * 0.75 : 20
-  const newFatiga = Math.min(100, fatiga + fatigaGanada)
-
-  const result = await performMatchSave(session.user.id, {
-    tipo: tipo ?? "liga",
-    ganado: sim.ganado,
-    golesRival: sim.golesRival,
-    expulsado: sim.expulsado,
-    matchStats: sim.matchStats,
-    updatedState: { fatiga: newFatiga },
+  return mutatePlayerOr404<Response>(session.user.id, async (row, tx) => {
+    const carrera = ((row.state as Record<string, unknown>).carrera ?? {}) as Record<string, unknown>
+    const enCurso = carrera.partidoEnCurso as { tipo?: string } | null | undefined
+    const r = (enCurso?.tipo === tipo ? completarEnCursoYCalcular(row) : null) ?? simularYCalcular(row, tipo)
+    if (!r.state || !r.activity) return { result: NextResponse.json(r.json, { status: r.status }) }
+    await tx.insert(activityLog).values(r.activity)
+    return { state: r.state, result: NextResponse.json(r.json, { status: r.status }) }
   })
-
-  return NextResponse.json(
-    { ...result.json, simulado: true, matchStats: sim.matchStats, ganado: sim.ganado },
-    { status: result.status },
-  )
 }

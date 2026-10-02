@@ -18,13 +18,22 @@ import {
   getDivisionInfo,
   COPA_RONDAS,
   EUROPA_COMPETICION_LABELS,
-  EUROPA_COMPETICION_ABBR,
+  formatRonda,
+  formatSalario,
+  formatRondaCorta,
   type CopaState,
   type EuropaState,
   type SeleccionState,
   type ContratoState,
   type MercadoState,
 } from "@/lib/world"
+import {
+  getProximoPartido,
+  buildCalendarioTemporada,
+  agruparPorMes,
+  COMPETICION_COLORS,
+  type CompeticionTipo,
+} from "@/lib/calendar"
 
 type Fixture = {
   jornada: number; rival: string; esLocal: boolean; jugado: boolean
@@ -79,7 +88,15 @@ const TIPO_LABELS: Record<string, string> = {
   EQUIPO: "Vestuario", ENTRENAMIENTO: "Entrenamiento", PERSONAL: "Personal",
 }
 
-type Tab = "liga" | "copa" | "europa" | "seleccion"
+const MODO_JUEGO_LABELS: Record<"completo" | "decisivos" | "simulado", string> = {
+  completo: "Completo", decisivos: "Decisivos", simulado: "Simulado",
+}
+const MODOS_JUEGO = [
+  { id: "completo" as const, label: "Completo", description: "Juegas todos los partidos tú mismo." },
+  { id: "decisivos" as const, label: "Decisivos", description: "Eliminatorias, selección y tramo final; el resto se simula." },
+  { id: "simulado" as const, label: "Simulado", description: "Toda la temporada se resuelve automáticamente." },
+]
+
 type SeasonPhase = "loading" | "no_season" | "event" | "paron" | "next_match" | "season_over" | "season_summary"
 
 type SeasonSummary = {
@@ -100,7 +117,6 @@ export default function SeasonPage() {
 
   const [playerState, setPlayerState] = useState<PlayerState | null>(null)
   const [phase, setPhase] = useState<SeasonPhase>("loading")
-  const [tab, setTab] = useState<Tab>("liga")
   const [eventNarrativo, setEventNarrativo] = useState<string | null>(null)
   const [geminiEventNarrative, setGeminiEventNarrative] = useState<string | null>(null)
   const [geminiEventLoading, setGeminiEventLoading] = useState(false)
@@ -133,6 +149,8 @@ export default function SeasonPage() {
   const [autoSeasonStep, setAutoSeasonStep] = useState(0)
   const [retirado, setRetirado] = useState(false)
   const [requestingTransfer, setRequestingTransfer] = useState(false)
+  const [showModeSwitch, setShowModeSwitch] = useState(false)
+  const [changingModo, setChangingModo] = useState(false)
 
   useEffect(() => {
     if (!session) return
@@ -191,13 +209,14 @@ export default function SeasonPage() {
 
     const paronActivo = (carrera.seleccion as SeleccionState | undefined)?.paron?.activo
 
-    // Defensa contra calendarios cortos/corruptos (ver informe-fallos.md C5):
-    // si la jornada actual no tiene un partido programado — típicamente
-    // porque `fixtures` se generó con menos de 16 entradas en algún momento
-    // anterior del historial de la cuenta — no hay nada que jugar ya, así que
-    // se trata la liga como terminada en vez de dejar la pantalla en blanco
-    // sin ninguna opción.
-    const hayPartidoEstaJornada = ps.carrera.fixtures.some((f) => f.jornada === jornadaActual)
+    // Calendario unificado (ver lib/calendar.ts): un único "próximo partido"
+    // para toda la temporada, sin importar de qué competición sea — Liga,
+    // Copa y Europa se intercalan por orden cronológico real (ya no hace
+    // falta terminar entera la Copa o la fase de grupos europea antes de
+    // tocar la Liga), el parón de selección pausa todo lo demás mientras
+    // está activo, y el torneo de verano solo aparece cuando el resto de la
+    // temporada de club ya ha terminado.
+    const hayPartidoPendiente = getProximoPartido(ps.carrera) !== null
 
     if (jornadaActual === 0 || ps.carrera.fixtures.length === 0) {
       setPhase("no_season")
@@ -205,14 +224,11 @@ export default function SeasonPage() {
       setPhase("event")
     } else if (paronActivo) {
       setPhase("paron")
-    } else if (jornadaActual <= 16 && hayPartidoEstaJornada) {
+    } else if (hayPartidoPendiente) {
       setPhase("next_match")
     } else {
-      // La temporada ha terminado — este aviso es transversal a cualquier
-      // pestaña, así que siempre se muestra en "Liga" para que nunca quede
-      // oculto detrás de la pestaña de Copa/Europa/Selección que tuvieras
-      // seleccionada (esas pestañas ya reflejan la temporada siguiente).
-      setTab("liga")
+      // La temporada ha terminado: no queda ningún partido pendiente de
+      // ninguna competición (Liga, Copa, Europa ni el torneo de selección).
       setPhase("season_over")
     }
   }, [router])
@@ -247,6 +263,22 @@ export default function SeasonPage() {
       await loadPlayer()
     } finally {
       setRequestingTransfer(false)
+    }
+  }
+
+  const handleChangeModoJuego = async (nuevo: "completo" | "decisivos" | "simulado") => {
+    if (changingModo || playerState?.carrera.modoJuego === nuevo) { setShowModeSwitch(false); return }
+    setChangingModo(true)
+    try {
+      await fetch("/api/player/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modoJuego: nuevo }),
+      })
+      await loadPlayer()
+    } finally {
+      setChangingModo(false)
+      setShowModeSwitch(false)
     }
   }
 
@@ -445,17 +477,16 @@ export default function SeasonPage() {
   if (!playerState) return null
 
   const { carrera } = playerState
-  const played = carrera.fixtures.filter((f) => f.jugado)
   const totalJornadas = 16
   const copa = carrera.copa
   const europa = carrera.europa
   const seleccion = carrera.seleccion
   const contrato = carrera.contrato
   const mercado = carrera.mercado
-  const showCopa = !!copa
-  const showEuropa = !!europa
-  const showSeleccion = !!seleccion?.convocado
   const hasTransferOffers = (mercado?.ofertasActivas?.length ?? 0) > 0
+  // Único cálculo de "qué toca ahora" para toda la página (hero card +
+  // paneles de detalle) — ver lib/calendar.ts.
+  const proximoPartido = getProximoPartido(carrera)
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
@@ -479,6 +510,40 @@ export default function SeasonPage() {
           </button>
         </div>
 
+        {/* Cambio rápido de modo de juego, sin salir de la temporada — antes
+            solo se podía cambiar desde Ajustes, obligando a abandonar el
+            flujo de juego para acelerar o frenar el ritmo de una sesión
+            concreta (ver auditoría UX, heurística 7, Ronda 8). */}
+        {phase !== "no_season" && (
+          <div>
+            <button
+              onClick={() => setShowModeSwitch((v) => !v)}
+              className="text-xs text-gray-500 hover:text-white transition-colors"
+            >
+              Modo: <span className="text-gray-300 font-semibold">{MODO_JUEGO_LABELS[carrera.modoJuego ?? "completo"]}</span> {showModeSwitch ? "▴" : "▾"}
+            </button>
+            {showModeSwitch && (
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {MODOS_JUEGO.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleChangeModoJuego(m.id)}
+                    disabled={changingModo}
+                    className={`text-left p-2.5 rounded-lg border text-xs transition-colors disabled:opacity-60 ${
+                      carrera.modoJuego === m.id
+                        ? "bg-green-500/10 border-green-500 text-white"
+                        : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <p className="font-bold">{m.label}</p>
+                    <p className="text-gray-500 text-[10px] mt-0.5">{m.description}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Modo de juego "simulado": sustituye toda la UI de partido a
             partido/pestañas mientras la temporada esté en curso por un único
             botón que resuelve todo (eventos + partidos de cualquier
@@ -499,66 +564,11 @@ export default function SeasonPage() {
           </div>
         )}
 
-        {/* Tab switcher — oculto al terminar la temporada: el resumen y el botón
-            para empezar la siguiente son transversales a cualquier competición,
-            así que no tiene sentido dejar que una pestaña los tape (ver C1 en
-            informe-fallos.md) */}
-        {carrera.modoJuego !== "simulado" && phase !== "no_season" && phase !== "season_over" && phase !== "season_summary" && (showCopa || showEuropa || showSeleccion) && (
-          <div className="flex gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
-            <button
-              onClick={() => setTab("liga")}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                tab === "liga" ? "bg-green-500 text-black" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Liga
-            </button>
-            {showCopa && (
-              <button
-                onClick={() => setTab("copa")}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                  tab === "copa"
-                    ? "bg-yellow-500 text-black"
-                    : copa?.eliminado
-                      ? "text-gray-600"
-                      : copa?.campeon
-                        ? "text-yellow-400"
-                        : "text-gray-400 hover:text-white"
-                }`}
-              >
-                Copa {copa?.campeon ? "★" : copa?.eliminado ? "✗" : ""}
-              </button>
-            )}
-            {showEuropa && (
-              <button
-                onClick={() => setTab("europa")}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                  tab === "europa" ? "bg-blue-500 text-black" : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {europa ? (EUROPA_COMPETICION_ABBR[europa.competicion] ?? "Europa") : "Europa"}
-              </button>
-            )}
-            {showSeleccion && (
-              <button
-                onClick={() => setTab("seleccion")}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                  tab === "seleccion"
-                    ? "bg-red-500 text-white"
-                    : seleccion?.paron?.activo
-                      ? "text-red-400 animate-pulse"
-                      : "text-gray-400 hover:text-white"
-                }`}
-              >
-                ES{seleccion?.paron?.activo ? " !" : ""}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* ── LIGA TAB ── */}
-        {(tab === "liga" || phase === "no_season") && (
-          <>
+        {/* Una sola vista para toda la temporada: Liga, Copa, competición
+            europea y Selección viven aquí juntas (calendario unificado más
+            abajo), sin pestañas que obliguen a cambiar de pantalla para ver
+            qué competición tiene partido pendiente. */}
+        <>
             {/* Season progress */}
             {phase !== "no_season" && (
               <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-3">
@@ -721,29 +731,51 @@ export default function SeasonPage() {
               </div>
             )}
 
-            {/* Contract / transfer request — vive dentro de la carrera, no en el navbar */}
+            {/* Contract / transfer request — vive dentro de la carrera, no en el navbar.
+                Las temporadas de contrato restantes se muestran aquí mismo, con el
+                mismo aviso de urgencia que ya tenía el dashboard — antes había que
+                salir de la temporada para verlas (ver informe-fallos.md, Ronda 8). */}
             {phase !== "no_season" && phase !== "season_summary" && (
-              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-white">Situación contractual</p>
-                  <p className="text-gray-500 text-xs mt-0.5 truncate">
-                    {mercado?.enLista
-                      ? "En lista de transferibles — a la espera de ofertas de clubes"
-                      : `${carrera.club} · Rep. ${carrera.reputacion}/100`}
-                  </p>
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white">Situación contractual</p>
+                    <p className="text-gray-500 text-xs mt-0.5 truncate">
+                      {mercado?.enLista
+                        ? "En lista de transferibles — a la espera de ofertas de clubes"
+                        : `${carrera.club} · Rep. ${carrera.reputacion}/100`}
+                    </p>
+                  </div>
+                  {mercado?.enLista ? (
+                    <span className="shrink-0 text-xs font-bold px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">
+                      EN LISTA
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleRequestTransfer}
+                      disabled={requestingTransfer}
+                      className="shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black font-bold rounded-lg text-xs transition-colors"
+                    >
+                      {requestingTransfer ? "Tramitando..." : "Solicitar traspaso"}
+                    </button>
+                  )}
                 </div>
-                {mercado?.enLista ? (
-                  <span className="shrink-0 text-xs font-bold px-3 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">
-                    EN LISTA
-                  </span>
-                ) : (
-                  <button
-                    onClick={handleRequestTransfer}
-                    disabled={requestingTransfer}
-                    className="shrink-0 px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-800 text-black font-bold rounded-lg text-xs transition-colors"
-                  >
-                    {requestingTransfer ? "Tramitando..." : "Solicitar traspaso"}
-                  </button>
+                {contrato && (
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-800">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                      contrato.temporadasRestantes <= 1
+                        ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                        : "bg-gray-800 text-gray-400 border-gray-700"
+                    }`}>
+                      {contrato.temporadasRestantes} temporada{contrato.temporadasRestantes !== 1 ? "s" : ""} de contrato
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      Salario <span className="text-white font-semibold">{formatSalario(contrato.salarioRelativo)}</span>
+                    </span>
+                    {contrato.temporadasRestantes <= 1 && (
+                      <span className="text-orange-400/80 text-xs">Expira pronto — decidirás tu futuro al cerrar la temporada</span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -776,7 +808,7 @@ export default function SeasonPage() {
                   <p className="text-yellow-300/60 text-xs">Tienes propuestas esperando respuesta</p>
                 </div>
                 <button
-                  onClick={() => router.push("/transfer")}
+                  onClick={() => router.push("/mercado")}
                   className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg text-xs transition-colors"
                 >
                   Ver →
@@ -784,30 +816,48 @@ export default function SeasonPage() {
               </div>
             )}
 
-            {/* Next match */}
+            {/* Próximo partido — único punto de entrada para jugar, sea de
+                Liga, Copa, competición europea o Selección (ver
+                lib/calendar.ts: getProximoPartido intercala las competiciones
+                por orden cronológico real). Ya no existe un "próximo partido
+                de Liga" aparte del de Copa o Europa — solo hay un próximo
+                partido, punto, y este es el único botón para jugarlo. */}
             {carrera.modoJuego !== "simulado" && phase === "next_match" && (() => {
-              const nextFixture = carrera.fixtures.find((f) => f.jornada === carrera.jornadaActual)
-              if (!nextFixture) return null
-              const partidosSancion = carrera.sancion?.partidosRestantes ?? 0
+              const proximo = proximoPartido
+              if (!proximo) return null
+              const esLiga = proximo.tipo === "liga"
+              const nombreEquipo = esLiga || proximo.tipo === "copa" || proximo.tipo === "europa"
+                ? carrera.club
+                : playerState.nationality
+              const rutaJuego = proximo.tipo === "liga" ? "/match" : `/match?tipo=${proximo.tipo}`
+              const partidosSancion = esLiga ? (carrera.sancion?.partidosRestantes ?? 0) : 0
               // Modo "decisivos": últimas 6 jornadas de liga (ascenso/descenso en juego)
               // se juegan siempre a mano; el resto se puede simular de un click.
-              const esJornadaDecisiva = carrera.jornadaActual > 10
-              const puedeSimular = carrera.modoJuego === "decisivos" && !esJornadaDecisiva
+              // Solo aplica a partidos de Liga — Copa/Europa/Selección siempre se juegan.
+              const esJornadaDecisiva = (carrera.jornadaActual ?? 0) > 10
+              const puedeSimular = esLiga && carrera.modoJuego === "decisivos" && !esJornadaDecisiva
               return (
                 <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider">Próximo partido · Jornada {nextFixture.jornada}</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Próximo partido</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${COMPETICION_COLORS[proximo.tipo]}`}>
+                      {proximo.competicion}
+                    </span>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">
+                      {formatRonda(proximo.ronda)} · {proximo.mes}
+                    </p>
+                  </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-lg font-black text-white">
-                        {nextFixture.esLocal ? `${carrera.club} vs ${nextFixture.rival}` : `${nextFixture.rival} vs ${carrera.club}`}
+                        {proximo.esLocal ? `${nombreEquipo} vs ${proximo.rival}` : `${proximo.rival} vs ${nombreEquipo}`}
                       </p>
                       <p className="text-gray-500 text-sm mt-1">
-                        {nextFixture.esLocal ? "En casa · " : "Fuera · "}
-                        {carrera.liga ?? "Liga"}
+                        {proximo.esLocal ? "En casa" : "Fuera"}
                       </p>
                     </div>
-                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${nextFixture.esLocal ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"}`}>
-                      {nextFixture.esLocal ? "LOCAL" : "VISITANTE"}
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${proximo.esLocal ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"}`}>
+                      {proximo.esLocal ? "LOCAL" : "VISITANTE"}
                     </span>
                   </div>
                   {partidosSancion > 0 ? (
@@ -828,7 +878,7 @@ export default function SeasonPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {(playerState?.posicionesSecundarias?.length ?? 0) > 0 && (
+                      {esLiga && (playerState?.posicionesSecundarias?.length ?? 0) > 0 && (
                         <label className="flex items-center gap-3 bg-gray-800/60 border border-gray-700 rounded-xl px-4 py-3 cursor-pointer">
                           <input
                             type="checkbox"
@@ -842,7 +892,7 @@ export default function SeasonPage() {
                         </label>
                       )}
                       <button
-                        onClick={() => router.push(jugarComoSecundaria ? "/match?posicion=secundaria" : "/match")}
+                        onClick={() => router.push(esLiga && jugarComoSecundaria ? "/match?posicion=secundaria" : rutaJuego)}
                         className={`w-full py-3 font-bold rounded-xl transition-colors ${
                           puedeSimular ? "bg-gray-800 hover:bg-gray-700 text-white" : "bg-green-500 hover:bg-green-400 text-black"
                         }`}
@@ -1059,72 +1109,127 @@ export default function SeasonPage() {
               </div>
             )}
 
-            {/* Fixture history */}
-            {played.length > 0 && phase !== "season_summary" && (
-              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-3">
-                <p className="text-xs text-gray-500 uppercase tracking-wider">Resultados de liga</p>
-                {played.slice().reverse().map((f) => (
-                  <div key={f.jornada} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-600 text-xs w-4">{f.jornada}</span>
-                      <span className="text-gray-300">{f.esLocal ? "vs " : "@ "}{f.rival}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-400 font-mono">{f.resultado ?? "-"}</span>
-                      {f.golesJugador > 0 && (
-                        <span className="text-yellow-400 text-xs font-bold">{f.golesJugador}G</span>
-                      )}
-                      {f.valoracion != null && (
-                        <span className={`font-mono text-xs font-bold ${
-                          f.valoracion >= 7 ? "text-green-400" : f.valoracion >= 5.5 ? "text-blue-400" : "text-orange-400"
-                        }`}>
-                          {f.valoracion.toFixed(1)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {/* Calendario unificado de la temporada — Liga, Copa, competición
+                europea y Selección repartidos por meses en una sola lista, en
+                vez de resultados de liga sueltos (ver lib/calendar.ts). Así
+                se ve de un vistazo cómo se entrelazan todas las
+                competiciones en una temporada real. */}
+            {phase !== "no_season" && phase !== "season_summary" && carrera.fixtures.length > 0 && (
+              <CalendarioTemporadaPanel carrera={carrera} />
             )}
-          </>
-        )}
 
-        {/* ── COPA TAB ── */}
-        {tab === "copa" && copa && (
-          <CopaBracketPanel copa={copa} club={carrera.club} onPlay={() => router.push("/match?tipo=copa")} />
-        )}
-
-        {/* ── EUROPA TAB ── */}
-        {tab === "europa" && europa && (
-          <EuropaPanel europa={europa} club={carrera.club} onPlay={() => router.push("/match?tipo=europa")} />
-        )}
-
-        {/* ── SELECCIÓN TAB ── */}
-        {tab === "seleccion" && seleccion && (
-          <SeleccionPanel
-            seleccion={seleccion}
-            nacionalidad={playerState.nationality}
-            onPlayParon={() => router.push("/match?tipo=seleccion")}
-            onPlayTorneo={() => router.push("/match?tipo=seleccion_torneo")}
-          />
-        )}
+            {/* Detalle de cada competición — bracket de Copa, tabla de grupo
+                europea, caps de Selección. Ya no viven detrás de una pestaña
+                propia: son solo lectura (historial y estado), el único botón
+                para jugar es el de "Próximo partido" de más arriba, sea cual
+                sea la competición a la que pertenezca. */}
+            {phase !== "no_season" && phase !== "season_summary" && copa && (
+              <CopaBracketPanel copa={copa} club={carrera.club} esProximo={proximoPartido?.tipo === "copa"} />
+            )}
+            {phase !== "no_season" && phase !== "season_summary" && europa && (
+              <EuropaPanel europa={europa} club={carrera.club} esProximo={proximoPartido?.tipo === "europa"} />
+            )}
+            {phase !== "no_season" && phase !== "season_summary" && seleccion?.convocado && (
+              <SeleccionPanel
+                seleccion={seleccion}
+                nacionalidad={playerState.nationality}
+                torneoEsProximo={proximoPartido?.tipo === "seleccion_torneo"}
+              />
+            )}
+        </>
       </div>
     </main>
   )
 }
 
+// ─── Calendario unificado de temporada ────────────────────────────────────────
+//
+// Sustituye a la antigua lista de "Resultados de liga": une Liga, Copa,
+// competición europea y Selección en una sola línea de tiempo agrupada por
+// mes (ver lib/calendar.ts), para que jugar un partido de Champions o de
+// Copa no dependa de acordarse de cambiar de pestaña.
+
+function CalendarioTemporadaPanel({ carrera }: { carrera: PlayerState["carrera"] }) {
+  const meses = agruparPorMes(buildCalendarioTemporada(carrera))
+  const hayAlgo = meses.some((m) => m.entries.length > 0)
+  if (!hayAlgo) return null
+
+  return (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-4">
+      <p className="text-xs text-gray-500 uppercase tracking-wider">Calendario de la temporada</p>
+      <div className="space-y-4">
+        {meses.map(({ mes, entries }) => (
+          <div key={mes} className="space-y-2">
+            <p className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">{mes}</p>
+            <div className="space-y-1.5">
+              {entries.map((e) => (
+                <div
+                  key={e.key}
+                  className={`flex items-center justify-between text-sm rounded-lg px-2 py-1.5 ${
+                    e.esProximo ? "bg-gray-800/80 border border-gray-700" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${COMPETICION_COLORS[e.tipo as CompeticionTipo]}`}>
+                      {e.competicionAbbr}
+                    </span>
+                    <span className="text-gray-600 text-xs shrink-0">{formatRondaCorta(e.ronda)}</span>
+                    <span className={`truncate ${e.esProximo ? "text-white font-semibold" : "text-gray-300"}`}>
+                      {e.esLocal ? "vs " : "@ "}{e.rival}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 pl-2">
+                    {e.jugado ? (
+                      <>
+                        <span className="text-gray-400 font-mono">{e.resultado ?? "-"}</span>
+                        {!!e.golesJugador && e.golesJugador > 0 && (
+                          <span className="text-yellow-400 text-xs font-bold">{e.golesJugador}G</span>
+                        )}
+                        {e.valoracion != null && (
+                          <span className={`font-mono text-xs font-bold ${
+                            e.valoracion >= 7 ? "text-green-400" : e.valoracion >= 5.5 ? "text-blue-400" : "text-orange-400"
+                          }`}>
+                            {e.valoracion.toFixed(1)}
+                          </span>
+                        )}
+                        {e.ganado != null && e.valoracion == null && (
+                          <span className={`text-xs font-bold ${e.ganado ? "text-green-400" : e.empate ? "text-blue-400" : "text-red-400"}`}>
+                            {e.ganado ? "V" : e.empate ? "E" : "D"}
+                          </span>
+                        )}
+                      </>
+                    ) : e.esProximo ? (
+                      <span className="text-xs font-bold text-green-400">PRÓXIMO</span>
+                    ) : (
+                      <span className="text-gray-700 text-xs">—</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Selección Nacional panel ─────────────────────────────────────────────────
 
+// Panel de solo lectura: estado y historial de la Selección Nacional (parón
+// y torneo de verano). Ya no lleva botones de "jugar" propios — el único
+// punto para jugar cualquier partido, sea de la competición que sea, es la
+// tarjeta de "Próximo partido" de arriba (ver lib/calendar.ts). Tenerlos aquí
+// también permitía saltarse el orden cronológico real (p. ej. jugar ya el
+// torneo de verano aunque la Liga siguiera pendiente).
 function SeleccionPanel({
   seleccion,
   nacionalidad,
-  onPlayParon,
-  onPlayTorneo,
+  torneoEsProximo,
 }: {
   seleccion: SeleccionState
   nacionalidad: string
-  onPlayParon: () => void
-  onPlayTorneo: () => void
+  torneoEsProximo: boolean
 }) {
   const torneo = seleccion.torneo
   const paron = seleccion.paron
@@ -1164,12 +1269,7 @@ function SeleccionPanel({
               <p className="text-lg font-black">
                 {next.esLocal ? `${nacionalidad} vs ${next.rival}` : `${next.rival} vs ${nacionalidad}`}
               </p>
-              <button
-                onClick={onPlayParon}
-                className="w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-sm transition-colors"
-              >
-                Jugar con la selección →
-              </button>
+              <p className="text-xs text-red-300/70">Es tu próximo partido — juégalo arriba ↑</p>
             </div>
           )
         })()}
@@ -1232,12 +1332,9 @@ function SeleccionPanel({
                   Partido {torneo.grupoPartidos.filter((p) => p.jugado).length + 1}/6 · {next.esLocal ? "Local" : "Fuera"}
                 </p>
                 <p className="text-lg font-black">{next.esLocal ? `${nacionalidad} vs ${next.rival}` : `${next.rival} vs ${nacionalidad}`}</p>
-                <button
-                  onClick={onPlayTorneo}
-                  className="w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-sm transition-colors"
-                >
-                  Jugar partido de {torneoLabel} →
-                </button>
+                <p className="text-xs text-red-300/70">
+                  {torneoEsProximo ? "Es tu próximo partido — juégalo arriba ↑" : "Pendiente — se juega al terminar la temporada de club"}
+                </p>
               </div>
             )
           })()}
@@ -1251,12 +1348,9 @@ function SeleccionPanel({
                   {rondaNames[el.rondaIdx] ?? "Eliminatoria"} · {el.esLocal ? "Local" : "Fuera"}
                 </p>
                 <p className="text-lg font-black">{nacionalidad} vs {el.rival}</p>
-                <button
-                  onClick={onPlayTorneo}
-                  className="w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-sm transition-colors"
-                >
-                  Jugar eliminatoria →
-                </button>
+                <p className="text-xs text-red-300/70">
+                  {torneoEsProximo ? "Es tu próximo partido — juégalo arriba ↑" : "Pendiente — se juega al terminar la temporada de club"}
+                </p>
               </div>
             )
           })()}
@@ -1350,7 +1444,11 @@ function EventOption({
 
 // ─── Copa bracket panel ───────────────────────────────────────────────────────
 
-function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: string; onPlay: () => void }) {
+// Solo lectura, igual que SeleccionPanel — el bracket de Copa se muestra
+// siempre que exista, pero jugar la siguiente ronda pasa por la tarjeta de
+// "Próximo partido" de arriba (que ya decide si de verdad toca Copa ahora
+// mismo o si hay un partido de Liga/Europa cronológicamente antes).
+function CopaBracketPanel({ copa, club, esProximo }: { copa: CopaState; club: string; esProximo: boolean }) {
   const rondaActual = COPA_RONDAS[copa.rondaIdx] ?? "R32"
 
   return (
@@ -1376,7 +1474,7 @@ function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: strin
                   : failed ? "bg-red-500/20 text-red-400 border border-red-500/40"
                   : "bg-gray-800 text-gray-600"
                 }`}>
-                  {ronda}
+                  {formatRondaCorta(ronda)}
                 </div>
                 {i < COPA_RONDAS.length - 1 && (
                   <span className={`text-xs ${passed ? "text-green-600" : "text-gray-700"}`}>›</span>
@@ -1390,17 +1488,14 @@ function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: strin
         {!copa.eliminado && !copa.campeon && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
             <p className="text-xs text-gray-500 uppercase tracking-wider">
-              {rondaActual} · {copa.esLocal ? "En casa" : "Fuera"}
+              {formatRonda(rondaActual)} · {copa.esLocal ? "En casa" : "Fuera"}
             </p>
             <p className="text-lg font-black text-white">
               {copa.esLocal ? `${club} vs ${copa.rival}` : `${copa.rival} vs ${club}`}
             </p>
-            <button
-              onClick={onPlay}
-              className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-colors text-sm"
-            >
-              Jugar partido de Copa →
-            </button>
+            <p className="text-xs text-yellow-300/70">
+              {esProximo ? "Es tu próximo partido — juégalo arriba ↑" : "Pendiente — todavía no le toca en el calendario"}
+            </p>
           </div>
         )}
 
@@ -1414,7 +1509,7 @@ function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: strin
         {copa.eliminado && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 text-center">
             <p className="text-gray-400 text-sm">
-              Eliminado en {copa.historial.at(-1)?.ronda ?? "fase anterior"} ante {copa.historial.at(-1)?.rival ?? "rival"}
+              Eliminado en {formatRonda(copa.historial.at(-1)?.ronda ?? "fase anterior")} ante {copa.historial.at(-1)?.rival ?? "rival"}
             </p>
           </div>
         )}
@@ -1427,7 +1522,7 @@ function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: strin
           {copa.historial.map((h, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 text-xs w-8">{h.ronda}</span>
+                <span className="text-gray-600 text-xs w-10">{formatRondaCorta(h.ronda)}</span>
                 <span className="text-gray-300">{h.rival}</span>
               </div>
               <div className="flex items-center gap-3">
@@ -1446,7 +1541,9 @@ function CopaBracketPanel({ copa, club, onPlay }: { copa: CopaState; club: strin
 
 // ─── Europa panel ─────────────────────────────────────────────────────────────
 
-function EuropaPanel({ europa, club, onPlay }: { europa: EuropaState; club: string; onPlay: () => void }) {
+// Solo lectura, mismo motivo que CopaBracketPanel: jugar pasa siempre por la
+// tarjeta de "Próximo partido" de arriba.
+function EuropaPanel({ europa, club, esProximo }: { europa: EuropaState; club: string; esProximo: boolean }) {
   const competicionLabel = EUROPA_COMPETICION_LABELS[europa.competicion] ?? "Europa"
   const s = europa.grupoStats
   const allGroupPlayed = europa.grupoPartidos.every((p) => p.jugado)
@@ -1499,12 +1596,9 @@ function EuropaPanel({ europa, club, onPlay }: { europa: EuropaState; club: stri
                 ? `${club} vs ${nextGroupMatch.rival}`
                 : `${nextGroupMatch.rival} vs ${club}`}
             </p>
-            <button
-              onClick={onPlay}
-              className="w-full py-2.5 bg-blue-500 hover:bg-blue-400 text-black font-bold rounded-lg transition-colors text-sm"
-            >
-              Jugar partido europeo →
-            </button>
+            <p className="text-xs text-blue-300/70">
+              {esProximo ? "Es tu próximo partido — juégalo arriba ↑" : "Pendiente — todavía no le toca en el calendario"}
+            </p>
           </div>
         )}
 
@@ -1512,17 +1606,14 @@ function EuropaPanel({ europa, club, onPlay }: { europa: EuropaState; club: stri
         {!nextGroupMatch && knockoutPending && (
           <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
             <p className="text-xs text-gray-500 uppercase tracking-wider">
-              {eliminatoriaRondas[el!.rondaIdx] ?? "Eliminatoria"} · {el!.esLocal ? "En casa" : "Fuera"}
+              {formatRonda(eliminatoriaRondas[el!.rondaIdx] ?? "Eliminatoria")} · {el!.esLocal ? "En casa" : "Fuera"}
             </p>
             <p className="text-lg font-black text-white">
               {el!.esLocal ? `${club} vs ${el!.rival}` : `${el!.rival} vs ${club}`}
             </p>
-            <button
-              onClick={onPlay}
-              className="w-full py-2.5 bg-blue-500 hover:bg-blue-400 text-black font-bold rounded-lg transition-colors text-sm"
-            >
-              Jugar eliminatoria →
-            </button>
+            <p className="text-xs text-blue-300/70">
+              {esProximo ? "Es tu próximo partido — juégalo arriba ↑" : "Pendiente — todavía no le toca en el calendario"}
+            </p>
           </div>
         )}
 
@@ -1571,7 +1662,7 @@ function EuropaPanel({ europa, club, onPlay }: { europa: EuropaState; club: stri
           {el!.historial.map((h, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-3">
-                <span className="text-gray-600 text-xs w-8">{h.ronda}</span>
+                <span className="text-gray-600 text-xs w-10">{formatRondaCorta(h.ronda)}</span>
                 <span className="text-gray-300">{h.rival}</span>
               </div>
               <div className="flex items-center gap-3">

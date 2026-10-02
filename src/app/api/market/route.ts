@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { transferListing, transferOffer, player, user } from "@/lib/schema"
-import { eq, and } from "drizzle-orm"
-import { requireSession } from "@/lib/session"
+import { eq, and, sql } from "drizzle-orm"
+import { requireRealAccount } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const { session, error } = await requireSession()
+  const { session, error } = await requireRealAccount()
   if (error) return error
 
   // All active listings with player + user data
@@ -25,7 +25,8 @@ export async function GET() {
     .from(transferListing)
     .innerJoin(player, eq(transferListing.playerId, player.id))
     .innerJoin(user, eq(transferListing.userId, user.id))
-    .where(eq(transferListing.active, true))
+    // Anuncios de invitados fuera: el mercado entre usuarios exige cuenta real.
+    .where(and(eq(transferListing.active, true), sql`${user.isAnonymous} IS NOT TRUE`))
 
   // Pending offers I made (to know if I already offered on a listing)
   const myOffers = await db
